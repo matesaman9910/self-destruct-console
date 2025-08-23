@@ -177,13 +177,12 @@
     <div class="footer">LCARS single‑file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
   </main>
 
-<!-- Paste this whole <script> in place of your current one. It makes OFFLINE impossible to miss. -->
 <script type="module">
-  // Firebase SDK (modular)
+  // Firebase SDK
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 
-  // === 1) CONFIG — REPLACE WITH YOUR REAL VALUES ===
+  // === CONFIG — replace all placeholders with real values ===
   const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -194,40 +193,106 @@
     appId: "YOUR_APP_ID"
   };
 
-  // === 2) Helpers ===
+  // ========== helpers ==========
   const $ = s => document.querySelector(s);
   const now = () => Date.now();
-  const fmt = { hhmmss(ms){ if(ms<0) ms=0; const t=Math.floor(ms/1000); const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60; const pad=n=>String(n).padStart(2,'0'); return (h>0?pad(h)+':':'')+pad(m)+':'+pad(s); }, when(ts){ return ts? new Date(ts).toLocaleString(): '–'; } };
+  const fmt = {
+    hhmmss(ms){ if(ms<0) ms=0; const t=Math.floor(ms/1000);
+      const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60;
+      const pad=n=>String(n).padStart(2,'0'); return (h>0?pad(h)+':':'')+pad(m)+':'+pad(s); },
+    when(ts){ return ts? new Date(ts).toLocaleString(): '–'; }
+  };
   const norm = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
   const qs = new URLSearchParams(location.search);
-  const FORCE_OFFLINE = qs.has('offline'); // add ?offline to URL to test the banner
+  const FORCE_OFFLINE = qs.has('offline');
 
-  // Ensure banner exists and sits ON TOP of everything
+  // ========== BIG FULLSCREEN ALARM OVERLAY + styles ==========
+  // styles (injected so you don't have to edit <style>)
+  const style = document.createElement('style');
+  style.textContent = `
+    #globalAlert{
+      position:fixed; inset:0; display:none; z-index:10000;
+      background:
+        radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),
+        radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
+        repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),
+        rgba(10,0,0,.92);
+      backdrop-filter: blur(2px);
+      align-items:center; justify-content:center;
+      pointer-events:all;
+    }
+    #globalAlert .msg{
+      font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial;
+      text-transform:uppercase; letter-spacing:.18em; text-align:center;
+      font-weight:900; line-height:1.1;
+      font-size:clamp(32px, 7vw, 120px);
+      color:#ff6b6b;
+      text-shadow:
+        0 0 8px #ff2a2a, 0 0 18px #ff2a2a, 0 0 36px #ff2a2a,
+        0 0 60px rgba(255,0,0,.45);
+      animation: alarmPulse 1.2s ease-in-out infinite, alarmGlow 2.4s ease-in-out infinite;
+    }
+    #globalAlert .sub{
+      margin-top:14px; font-size:clamp(12px, 1.6vw, 18px); color:#ffb3b3; opacity:.9;
+      letter-spacing:.14em;
+    }
+    @keyframes alarmPulse { 0%{opacity:.35} 50%{opacity:1} 100%{opacity:.35} }
+    @keyframes alarmGlow {
+      0%{ text-shadow:0 0 8px #ff2a2a, 0 0 18px #ff2a2a, 0 0 36px #ff2a2a, 0 0 60px rgba(255,0,0,.45); }
+      50%{ text-shadow:0 0 12px #ff3f3f, 0 0 24px #ff3f3f, 0 0 48px #ff3f3f, 0 0 80px rgba(255,0,0,.6); }
+      100%{ text-shadow:0 0 8px #ff2a2a, 0 0 18px #ff2a2a, 0 0 36px #ff2a2a, 0 0 60px rgba(255,0,0,.45); }
+    }
+    /* keep the small banner for redundancy */
+    #topBanner{ position:fixed; left:0; right:0; top:0; z-index:9999; padding:12px 16px;
+      text-align:center; font-weight:900; letter-spacing:.18em; text-transform:uppercase;
+      border-bottom:2px solid #300; background:#1a0000; color:#ff9b9b; display:none }
+  `;
+  document.head.appendChild(style);
+
+  // overlay element
+  let alarm = document.getElementById('globalAlert');
+  if(!alarm){
+    alarm = document.createElement('div');
+    alarm.id = 'globalAlert';
+    alarm.innerHTML = `
+      <div class="msg">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE
+        <div class="sub">Firebase unreachable · controls disabled</div>
+      </div>`;
+    document.body.appendChild(alarm);
+  }
+
+  // keep the old banner too (top strip)
   let banner = document.getElementById('topBanner');
   if(!banner){
     banner = document.createElement('div');
     banner.id = 'topBanner';
     banner.textContent = 'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE';
-    banner.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:12px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none';
     document.body.prepend(banner);
   }
   const showBanner = (txt='SELF DESTRUCT SYSTEM DAMAGED — OFFLINE') => { banner.textContent = txt; banner.style.display = 'block'; };
   const hideBanner = () => { banner.style.display = 'none'; };
+  const showAlarm = (txtMain='SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', txtSub='Firebase unreachable · controls disabled')=>{
+    alarm.querySelector('.msg').firstChild.nodeValue = txtMain;
+    const sub = alarm.querySelector('.sub'); if(sub) sub.textContent = txtSub;
+    alarm.style.display='flex';
+  };
+  const hideAlarm = ()=>{ alarm.style.display='none'; };
 
-  // Refs
+  // ========== UI refs ==========
   const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
   const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl');
   const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
   const gateOverlay=$('#gateOverlay'), gateLabel=$('#gateLabel');
+
   const btnSetPin=$('#btnSetPin'), btnUnlock=$('#btnUnlock');
   const btnSaveOfficers=$('#btnSaveOfficers'), btnArm=$('#btnArm'), btnDisarm=$('#btnDisarm'), btnStart=$('#btnStart'), btnAbort=$('#btnAbort'), btnReset=$('#btnReset');
   const officerSetupSection=$('#officerSetupSection'), officerLockedMsg=$('#officerLockedMsg');
 
   function show(tab){ if(tab==='control'){ vControl.style.display='grid'; vCountdown.style.display='none'; tabControl.classList.add('active'); tabCountdown.classList.remove('active'); if(!unlocked) gateOverlay.style.display='flex'; } else { vCountdown.style.display='grid'; vControl.style.display='none'; tabCountdown.classList.add('active'); tabControl.classList.remove('active'); gateOverlay.style.display='none'; } }
-  tabCountdown.addEventListener('click',()=>show('countdown'));
-  tabControl.addEventListener('click',()=>show('control'));
+  tabCountdown?.addEventListener('click',()=>show('countdown'));
+  tabControl?.addEventListener('click',()=>show('control'));
 
-  // Sound
+  // ========== sound ==========
   let audioEnabled=false, tickEnabled=true, audioCtx=null;
   const soundBtn = document.getElementById('btnToggleSound');
   const tickBox  = document.getElementById('chkTick');
@@ -236,22 +301,29 @@
   function speak(text){ if(!audioEnabled) return; const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1; const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0]; if(pref) u.voice=pref; speechSynthesis.speak(u); }
   function beep(d=120,f=880,v=0.05){ if(!audioEnabled||!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.value=v; o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d); }
 
-  // State
+  // ========== state ==========
   let state = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`], controlKeyHash:null };
   let officers = { locked:false, o1:{name:'', nameNorm:'', codeHash:''}, o2:{name:'', nameNorm:'', codeHash:''} };
-  let unlocked=false;
-  let ONLINE=false; // connectivity flag
+  let unlocked=false, ONLINE=false;
 
   function disableControls(dis){ [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = dis; }); }
-  function setOnline(b,msg){ ONLINE=b; if(b){ hideBanner(); disableControls(false);} else { showBanner(msg||'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true);} }
+  function setOnline(ok, msg){
+    ONLINE = ok;
+    if(ok){ hideAlarm(); hideBanner(); disableControls(false); }
+    else { showAlarm(msg||'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); showBanner(msg||'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true); }
+  }
 
   function render(){
     const s=state.status; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent=fmt.when(state.since);
     if(s==='COUNTDOWN'){
-      const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now(); timeLeftEl.textContent=fmt.hhmmss(left); barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%'; countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${(Math.floor(dur/1000)%60).toString().padStart(2,'0')}s from ${new Date(T0).toLocaleTimeString()}`; timeLeftEl.classList.toggle('flash', left<=30000);
+      const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now();
+      timeLeftEl.textContent=fmt.hhmmss(left);
+      barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%';
+      countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${(Math.floor(dur/1000)%60).toString().padStart(2,'0')}s from ${new Date(T0).toLocaleTimeString()}`;
+      timeLeftEl.classList.toggle('flash', left<=30000);
     } else if(s==='ARMED'){ timeLeftEl.textContent='— — : — —'; barFill.style.width='0%'; countdownInfoEl.textContent='Awaiting MARK'; timeLeftEl.classList.remove('flash'); }
-    else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; timeLeftEl.classList.remove('flash'); }
-    else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; countdownInfoEl.textContent='—'; timeLeftEl.classList.remove('flash'); }
+      else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; timeLeftEl.classList.remove('flash'); }
+      else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; countdownInfoEl.textContent='—'; timeLeftEl.classList.remove('flash'); }
     logEl.innerHTML=(state.log||[]).slice().reverse().join('\n');
   }
 
@@ -270,23 +342,21 @@
     }
   }, 200);
 
-  // Crypto
+  // ========== crypto ==========
   async function sha256(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256', enc); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
 
-  // Validate config early
+  // ========== config validation ==========
   function validateConfig(){
     const cfg=firebaseConfig; const vals=[cfg.apiKey,cfg.authDomain,cfg.databaseURL,cfg.projectId,cfg.appId];
     if(vals.some(v=>!v||/YOUR_/.test(v)||/YOUR_PROJECT_ID/.test(v)||/YOUR_DB/.test(v))) return 'CONFIG MISSING — OFFLINE';
-    if(!/\.firebasedatabase\.app$/i.test(new URL(cfg.databaseURL).hostname)) return 'BAD databaseURL — OFFLINE';
+    try{ const h=new URL(cfg.databaseURL).hostname; if(!/\.firebasedatabase\.app$/i.test(h)) return 'BAD databaseURL — OFFLINE'; }catch{ return 'BAD databaseURL — OFFLINE'; }
     if(!/\.firebaseapp\.com$/i.test(cfg.authDomain)) return 'BAD authDomain — OFFLINE';
     return null;
   }
+  function withTimeout(p, ms=6000){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]); }
 
-  // Promise timeout wrapper
-  function withTimeout(p, ms=5000){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]); }
-
-  // Firebase boot with aggressive detection
-  let app, db, root, cfg;
+  // ========== Firebase boot ==========
+  let app, db, root, cfgRef;
   (async function init(){
     const cfgErr = validateConfig();
     if(cfgErr || FORCE_OFFLINE){ setOnline(false, cfgErr||'OFFLINE (forced)'); return; }
@@ -294,38 +364,35 @@
       app = initializeApp(firebaseConfig);
       db = getDatabase(app);
       root = ref(db, 'selfDestruct');
-      cfg  = ref(db, 'selfDestruct/config');
+      cfgRef  = ref(db, 'selfDestruct/config');
 
-      // First read with timeout: if it times out, we go OFFLINE
       const s = await withTimeout(get(root), 6000);
       if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() };
 
-      const c = await withTimeout(get(cfg), 6000);
-      if(c.exists()) { officers = (c.val()||{}).officers || officers; } else { await set(cfg, { officers }); }
+      const c = await withTimeout(get(cfgRef), 6000);
+      if(c.exists()) { officers = (c.val()||{}).officers || officers; } else { await set(cfgRef, { officers }); }
 
-      // Live listeners
       onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; render(); setControlState(); refreshPinUI(); });
-      onValue(cfg,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; updateOfficerUI(); });
+      onValue(cfgRef,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; updateOfficerUI(); });
 
-      // Connectivity watchdog
       const connectedRef = ref(db, '.info/connected');
-      onValue(connectedRef, (snap)=>{ setOnline(snap.val()===true); });
+      onValue(connectedRef, snap=>{ setOnline(snap.val()===true); });
 
       setOnline(true);
-    }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); }
+    }catch(err){
+      console.error('[Firebase error]', err);
+      setOnline(false, 'FIREBASE ERROR — OFFLINE');
+    }
   })();
 
-  // DB helpers (guarded)
+  // ========== DB helpers ==========
   function assertOnline(){ if(!ONLINE) throw new Error('OFFLINE'); }
   async function write(patch){ assertOnline(); return update(root, patch); }
-  async function writeCfg(patch){ assertOnline(); return update(cfg, patch); }
+  async function writeCfg(patch){ assertOnline(); return update(cfgRef, patch); }
   async function appendLog(line){ try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`; state.log=(state.log||[]).slice(-99).concat(e); await write({ log: state.log }); }catch(_){} }
   function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch(_){ return; } }
 
-  // Expose test hook in console
-  window.__SD_forceOffline = ()=> setOnline(false, 'OFFLINE (manual)');
-
-  // PIN
+  // ========== PIN ==========
   function refreshPinUI(){ if(state.controlKeyHash){ if(btnSetPin) btnSetPin.style.display='none'; } else { if(btnSetPin) btnSetPin.style.display='inline-block'; } }
   btnSetPin?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline. Check Firebase configuration.');
@@ -341,7 +408,7 @@
     unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none'; setControlState();
   });
 
-  // Officers
+  // ========== officers ==========
   const officersAreLocked = ()=> !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
   function updateOfficerUI(){ if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; } else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; } }
   btnSaveOfficers?.addEventListener('click', async ()=>{
@@ -355,7 +422,7 @@
     await writeCfg({ officers:o }); officers=o; updateOfficerUI(); await appendLog('Officers set.');
   });
 
-  // Arm / Disarm / Start / Abort / Reset
+  // ========== controls ==========
   btnArm?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline.');
     if(!unlocked) return; if(state.status!=='IDLE') return alert('Must be IDLE to arm.'); if(!officersAreLocked()) return alert('Set officers first.');
@@ -365,7 +432,8 @@
     const ok1 = (n1===officers.o1.nameNorm) && (await sha256(p1)===officers.o1.codeHash);
     const ok2 = (n2===officers.o2.nameNorm) && (await sha256(p2)===officers.o2.codeHash);
     if(!(ok1 && ok2)) { alert('Verification failed.'); return; }
-    await write({auth1:{at:now()}, auth2:{at:now()}, armedAt:now()}); await setStatus('ARMED'); await appendLog('Armed by two officers.'); setControlState();
+    await write({auth1:{at:now()}, auth2:{at:now()}, armedAt:now()});
+    await setStatus('ARMED'); await appendLog('Armed by two officers.'); setControlState();
   });
   btnDisarm?.addEventListener('click', async ()=>{ if(!ONLINE) return alert('System offline.'); if(!unlocked) return; await write({auth1:null, auth2:null, armedAt:null}); await setStatus('IDLE'); await appendLog('Disarmed.'); setControlState(); });
   btnStart?.addEventListener('click', async ()=>{
@@ -376,11 +444,12 @@
   });
   btnAbort?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline.'); if(!unlocked) return; if(state.status!=='COUNTDOWN') return;
-    const left = (state.startAt||0)+(state.durationMs||0)-now(); if(left <= 15000){ await appendLog('Abort rejected — inside T‑15s.'); return; }
+    const left = (state.startAt||0)+(state.durationMs||0)-now(); if(left <= 15000){ await appendLog('Abort rejected — inside T-15s.'); return; }
     await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); setControlState();
   });
   btnReset?.addEventListener('click', async ()=>{
-    if(!ONLINE) return alert('System offline.'); if(!unlocked) return; const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
+    if(!ONLINE) return alert('System offline.'); if(!unlocked) return;
+    const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
     await set(root, newState); await writeCfg({ officers }); setControlState();
   });
 
@@ -394,6 +463,6 @@
     if(btnSaveOfficers) btnSaveOfficers.disabled = !ONLINE || !unlocked || officersAreLocked();
   }
 
-  // Initial render
+  // initial render
   render();
 </script>
