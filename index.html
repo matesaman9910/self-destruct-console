@@ -177,13 +177,13 @@
     <div class="footer">LCARS single‑file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
   </main>
 
-<!-- Paste this entire <script> block in place of your existing one. Keep the rest of your HTML the same. -->
+<!-- Paste this whole <script> in place of your current one. It makes OFFLINE impossible to miss. -->
 <script type="module">
   // Firebase SDK (modular)
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 
-  // === 1) CONFIG — replace all placeholders with your real values ===
+  // === 1) CONFIG — REPLACE WITH YOUR REAL VALUES ===
   const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -194,58 +194,56 @@
     appId: "YOUR_APP_ID"
   };
 
-  // === 2) DOM helpers ===
+  // === 2) Helpers ===
   const $ = s => document.querySelector(s);
   const now = () => Date.now();
   const fmt = { hhmmss(ms){ if(ms<0) ms=0; const t=Math.floor(ms/1000); const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60; const pad=n=>String(n).padStart(2,'0'); return (h>0?pad(h)+':':'')+pad(m)+':'+pad(s); }, when(ts){ return ts? new Date(ts).toLocaleString(): '–'; } };
   const norm = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+  const qs = new URLSearchParams(location.search);
+  const FORCE_OFFLINE = qs.has('offline'); // add ?offline to URL to test the banner
 
-  // === 3) UI refs ===
-  const banner = $('#topBanner');
+  // Ensure banner exists and sits ON TOP of everything
+  let banner = document.getElementById('topBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'topBanner';
+    banner.textContent = 'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE';
+    banner.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;padding:12px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none';
+    document.body.prepend(banner);
+  }
   const showBanner = (txt='SELF DESTRUCT SYSTEM DAMAGED — OFFLINE') => { banner.textContent = txt; banner.style.display = 'block'; };
   const hideBanner = () => { banner.style.display = 'none'; };
 
+  // Refs
   const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
   const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl');
   const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
   const gateOverlay=$('#gateOverlay'), gateLabel=$('#gateLabel');
-
-  const btnSetPin = $('#btnSetPin');
-  const btnUnlock = $('#btnUnlock');
-  const btnSaveOfficers=$('#btnSaveOfficers');
-  const btnArm=$('#btnArm');
-  const btnDisarm=$('#btnDisarm');
-  const btnStart=$('#btnStart');
-  const btnAbort=$('#btnAbort');
-  const btnReset=$('#btnReset');
-
-  const officerSetupSection=$('#officerSetupSection');
-  const officerLockedMsg=$('#officerLockedMsg');
+  const btnSetPin=$('#btnSetPin'), btnUnlock=$('#btnUnlock');
+  const btnSaveOfficers=$('#btnSaveOfficers'), btnArm=$('#btnArm'), btnDisarm=$('#btnDisarm'), btnStart=$('#btnStart'), btnAbort=$('#btnAbort'), btnReset=$('#btnReset');
+  const officerSetupSection=$('#officerSetupSection'), officerLockedMsg=$('#officerLockedMsg');
 
   function show(tab){ if(tab==='control'){ vControl.style.display='grid'; vCountdown.style.display='none'; tabControl.classList.add('active'); tabCountdown.classList.remove('active'); if(!unlocked) gateOverlay.style.display='flex'; } else { vCountdown.style.display='grid'; vControl.style.display='none'; tabCountdown.classList.add('active'); tabControl.classList.remove('active'); gateOverlay.style.display='none'; } }
   tabCountdown.addEventListener('click',()=>show('countdown'));
   tabControl.addEventListener('click',()=>show('control'));
 
-  // === 4) Sound ===
+  // Sound
   let audioEnabled=false, tickEnabled=true, audioCtx=null;
-  const soundBtn = $('#btnToggleSound') || document.getElementById('btnToggleSound');
-  const tickBox  = $('#chkTick') || document.getElementById('chkTick');
+  const soundBtn = document.getElementById('btnToggleSound');
+  const tickBox  = document.getElementById('chkTick');
   if(soundBtn) soundBtn.addEventListener('click',()=>{ audioEnabled=!audioEnabled; if(audioEnabled && !audioCtx){ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); } soundBtn.textContent = audioEnabled? 'Disable Sound':'Enable Sound'; });
   if(tickBox) tickBox.addEventListener('change',e=> tickEnabled=e.target.checked);
   function speak(text){ if(!audioEnabled) return; const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1; const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0]; if(pref) u.voice=pref; speechSynthesis.speak(u); }
   function beep(d=120,f=880,v=0.05){ if(!audioEnabled||!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.value=v; o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d); }
 
-  // === 5) App state ===
+  // State
   let state = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`], controlKeyHash:null };
   let officers = { locked:false, o1:{name:'', nameNorm:'', codeHash:''}, o2:{name:'', nameNorm:'', codeHash:''} };
   let unlocked=false;
   let ONLINE=false; // connectivity flag
 
-  function setOnline(b){ ONLINE=b; if(b){ hideBanner(); } else { showBanner(); }
-    // Disable/enable control-side buttons when offline
-    const disable = (!ONLINE);
-    [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = disable; });
-  }
+  function disableControls(dis){ [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = dis; }); }
+  function setOnline(b,msg){ ONLINE=b; if(b){ hideBanner(); disableControls(false);} else { showBanner(msg||'SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true);} }
 
   function render(){
     const s=state.status; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent=fmt.when(state.since);
@@ -272,55 +270,70 @@
     }
   }, 200);
 
-  // === 6) Crypto ===
+  // Crypto
   async function sha256(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256', enc); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
 
-  // === 7) Firebase boot with robust OFFLINE detection ===
+  // Validate config early
+  function validateConfig(){
+    const cfg=firebaseConfig; const vals=[cfg.apiKey,cfg.authDomain,cfg.databaseURL,cfg.projectId,cfg.appId];
+    if(vals.some(v=>!v||/YOUR_/.test(v)||/YOUR_PROJECT_ID/.test(v)||/YOUR_DB/.test(v))) return 'CONFIG MISSING — OFFLINE';
+    if(!/\.firebasedatabase\.app$/i.test(new URL(cfg.databaseURL).hostname)) return 'BAD databaseURL — OFFLINE';
+    if(!/\.firebaseapp\.com$/i.test(cfg.authDomain)) return 'BAD authDomain — OFFLINE';
+    return null;
+  }
+
+  // Promise timeout wrapper
+  function withTimeout(p, ms=5000){ return Promise.race([p, new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]); }
+
+  // Firebase boot with aggressive detection
   let app, db, root, cfg;
   (async function init(){
+    const cfgErr = validateConfig();
+    if(cfgErr || FORCE_OFFLINE){ setOnline(false, cfgErr||'OFFLINE (forced)'); return; }
     try{
       app = initializeApp(firebaseConfig);
       db = getDatabase(app);
       root = ref(db, 'selfDestruct');
       cfg  = ref(db, 'selfDestruct/config');
 
-      // initial reads
-      const s = await get(root);
+      // First read with timeout: if it times out, we go OFFLINE
+      const s = await withTimeout(get(root), 6000);
       if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() };
-      const c = await get(cfg);
+
+      const c = await withTimeout(get(cfg), 6000);
       if(c.exists()) { officers = (c.val()||{}).officers || officers; } else { await set(cfg, { officers }); }
 
-      // live listeners
+      // Live listeners
       onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; render(); setControlState(); refreshPinUI(); });
       onValue(cfg,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; updateOfficerUI(); });
 
-      // connectivity watchdog
+      // Connectivity watchdog
       const connectedRef = ref(db, '.info/connected');
       onValue(connectedRef, (snap)=>{ setOnline(snap.val()===true); });
 
-      setOnline(true); // if all above worked, we’re online
-    }catch(err){
-      console.error('[Firebase init failed]', err);
-      setOnline(false); // show OFFLINE banner and disable controls
-    }
+      setOnline(true);
+    }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); }
   })();
 
-  // === 8) DB helpers (guarded when offline) ===
+  // DB helpers (guarded)
   function assertOnline(){ if(!ONLINE) throw new Error('OFFLINE'); }
   async function write(patch){ assertOnline(); return update(root, patch); }
   async function writeCfg(patch){ assertOnline(); return update(cfg, patch); }
-  async function appendLog(line){ try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`; state.log=(state.log||[]).slice(-99).concat(e); await write({ log: state.log }); }catch(e){ /* ignore while offline */ } }
-  function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch(e){ return; } }
+  async function appendLog(line){ try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`; state.log=(state.log||[]).slice(-99).concat(e); await write({ log: state.log }); }catch(_){} }
+  function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch(_){ return; } }
 
-  // === 9) PIN & access ===
-  function refreshPinUI(){ if(state.controlKeyHash){ btnSetPin.style.display='none'; } else { if(btnSetPin) btnSetPin.style.display='inline-block'; } }
-  $('#btnSetPin')?.addEventListener('click', async ()=>{
+  // Expose test hook in console
+  window.__SD_forceOffline = ()=> setOnline(false, 'OFFLINE (manual)');
+
+  // PIN
+  function refreshPinUI(){ if(state.controlKeyHash){ if(btnSetPin) btnSetPin.style.display='none'; } else { if(btnSetPin) btnSetPin.style.display='inline-block'; } }
+  btnSetPin?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline. Check Firebase configuration.');
     if(state.controlKeyHash){ alert('PIN already set.'); return; }
     const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
     const hash=await sha256(pin); await write({ controlKeyHash: hash }); await appendLog('Operator PIN set.'); refreshPinUI();
   });
-  $('#btnUnlock')?.addEventListener('click', async ()=>{
+  btnUnlock?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline.');
     const pin=$('#pin').value.trim(); if(!pin) return;
     if(!state.controlKeyHash) return alert('No PIN set yet.');
@@ -328,10 +341,10 @@
     unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none'; setControlState();
   });
 
-  // === 10) Officers (one-time) ===
+  // Officers
   const officersAreLocked = ()=> !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
-  function updateOfficerUI(){ officerSetupSection.style.display = officersAreLocked()? 'none':'block'; officerLockedMsg.style.display = officersAreLocked()? 'block':'none'; }
-  $('#btnSaveOfficers')?.addEventListener('click', async ()=>{
+  function updateOfficerUI(){ if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; } else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; } }
+  btnSaveOfficers?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline.');
     if(!unlocked) return alert('Unlock CONTROL first.');
     if(officersAreLocked()){ alert('Officers already set.'); return; }
@@ -342,8 +355,8 @@
     await writeCfg({ officers:o }); officers=o; updateOfficerUI(); await appendLog('Officers set.');
   });
 
-  // === 11) Arm / Disarm ===
-  $('#btnArm')?.addEventListener('click', async ()=>{
+  // Arm / Disarm / Start / Abort / Reset
+  btnArm?.addEventListener('click', async ()=>{
     if(!ONLINE) return alert('System offline.');
     if(!unlocked) return; if(state.status!=='IDLE') return alert('Must be IDLE to arm.'); if(!officersAreLocked()) return alert('Set officers first.');
     const n1 = norm($('#verifyO1Name').value), p1=$('#verifyO1Pin').value.trim();
@@ -354,26 +367,20 @@
     if(!(ok1 && ok2)) { alert('Verification failed.'); return; }
     await write({auth1:{at:now()}, auth2:{at:now()}, armedAt:now()}); await setStatus('ARMED'); await appendLog('Armed by two officers.'); setControlState();
   });
-  $('#btnDisarm')?.addEventListener('click', async ()=>{ if(!ONLINE) return alert('System offline.'); if(!unlocked) return; await write({auth1:null, auth2:null, armedAt:null}); await setStatus('IDLE'); await appendLog('Disarmed.'); setControlState(); });
-
-  // === 12) Start / Abort / Reset ===
-  $('#btnStart')?.addEventListener('click', async ()=>{
-    if(!ONLINE) return alert('System offline.');
-    if(!unlocked) return; if(state.status!=='ARMED') return alert('Arm first.');
+  btnDisarm?.addEventListener('click', async ()=>{ if(!ONLINE) return alert('System offline.'); if(!unlocked) return; await write({auth1:null, auth2:null, armedAt:null}); await setStatus('IDLE'); await appendLog('Disarmed.'); setControlState(); });
+  btnStart?.addEventListener('click', async ()=>{
+    if(!ONLINE) return alert('System offline.'); if(!unlocked) return; if(state.status!=='ARMED') return alert('Arm first.');
     const m=Math.max(0, parseInt($('#mins').value||'0',10)); const s=Math.max(0, Math.min(59, parseInt($('#secs').value||'0',10)));
     const durationMs=(m*60+s)*1000; const startAt=now();
     await write({startAt, durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`); setControlState();
   });
-  $('#btnAbort')?.addEventListener('click', async ()=>{
-    if(!ONLINE) return alert('System offline.');
-    if(!unlocked) return; if(state.status!=='COUNTDOWN') return;
-    const left = (state.startAt||0)+(state.durationMs||0)-now();
-    if(left <= 15000){ await appendLog('Abort rejected — inside T‑15s.'); return; }
+  btnAbort?.addEventListener('click', async ()=>{
+    if(!ONLINE) return alert('System offline.'); if(!unlocked) return; if(state.status!=='COUNTDOWN') return;
+    const left = (state.startAt||0)+(state.durationMs||0)-now(); if(left <= 15000){ await appendLog('Abort rejected — inside T‑15s.'); return; }
     await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); setControlState();
   });
-  $('#btnReset')?.addEventListener('click', async ()=>{
-    if(!ONLINE) return alert('System offline.');
-    if(!unlocked) return; const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
+  btnReset?.addEventListener('click', async ()=>{
+    if(!ONLINE) return alert('System offline.'); if(!unlocked) return; const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
     await set(root, newState); await writeCfg({ officers }); setControlState();
   });
 
@@ -387,6 +394,6 @@
     if(btnSaveOfficers) btnSaveOfficers.disabled = !ONLINE || !unlocked || officersAreLocked();
   }
 
-  // initial render
+  // Initial render
   render();
 </script>
