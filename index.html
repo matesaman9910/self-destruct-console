@@ -177,16 +177,6 @@
     <div class="footer">LCARS single‑file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
   </main>
 
-<!-- Drop-in replacement for your <script type="module">…</script>.
- Adds:
- 1) Anonymous Auth + Operator UID gate (writes only if this device UID matches config)
- 2) Break-glass Rekey (Operator PIN + Recovery Token), single-use
- 3) Rate-limit & TERMINAL LOCKOUT overlay after repeated failures
- 4) Tamper alarm (MutationObserver) → lockout + log
- 5) New-device warning on CONTROL unlock
- 6) Keeps klaxon + TTS from v3
- NOTE: After you paste this, also update your DB rules (see chat).
--->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
@@ -283,7 +273,13 @@
   async function raiseTamper(reason){ await appendLog(`SECURITY: Tamper detected — ${reason}`); enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED'); }
 
   function lockoutActive(){ return now() < lockoutUntil; }
-  async function enterLockout(sub){ lockoutUntil = now()+5*60*1000; await update(securityRef,{ lockoutUntil }); showAlarm('TERMINAL LOCKOUT', sub||'Security cooldown active'); speak('Security alert. Terminal lockout engaged.'); setControlState(); }
+  async function enterLockout(sub){
+    lockoutUntil = now()+5*60*1000;
+    try { if (securityRef) await update(securityRef,{ lockoutUntil }); } catch (_) { /* ignore if auth/db not ready */ }
+    showAlarm('TERMINAL LOCKOUT', sub||'Security cooldown active');
+    speak('Security alert. Terminal lockout engaged.');
+    setControlState();
+  }
 
   // ========= timer + last‑5 spoken =========
   let lastSpokenSec=null; setInterval(()=>{ if(state.status==='COUNTDOWN'){ rendering=true; render(); rendering=false; const left=(state.startAt||0)+(state.durationMs||0)-now(); const sec=Math.ceil(left/1000); if(tickEnabled && audioEnabled && sec>0 && (sec!==window.__lastSec)){ window.__lastSec=sec; beep(70, left<=5000?1200: left<=30000?1000:700, left<=30000?0.09:0.05);} if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)); } if(left<=0 && state.status!=='DETONATED'){ setStatus('DETONATED'); appendLog('*** DETONATION ***'); speak('Auto destruct complete. Goodbye.'); stopKlaxon(); } setControlState(); } }, 200);
@@ -297,7 +293,19 @@
 
   // ========= Firebase boot + auth =========
   let app, db, root, cfgRef, securityRef, auth;
-  (async function init(){ const cfgErr = validateConfig(); if(cfgErr || FORCE_OFFLINE){ setOnline(false, cfgErr||'OFFLINE (forced)'); return; } try{ app = initializeApp(firebaseConfig); auth = getAuth(app); await signInAnonymously(auth); onAuthStateChanged(auth, async (user)=>{ if(!user){ setOnline(false, 'AUTH ERROR — OFFLINE'); return; } myUid=user.uid; await appendLocalNoticeUID(); }); db = getDatabase(app); root = ref(db, 'selfDestruct'); cfgRef  = ref(db, 'selfDestruct/config'); securityRef = ref(db, 'selfDestruct/security'); const s = await withTimeout(get(root), 6000); if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() }; const c = await withTimeout(get(cfgRef), 6000); if(c.exists()) { const v=c.val()||{}; officers = v.officers || officers; operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || ''; } else { await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' }); } onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; rendering=true; render(); rendering=false; setControlState(); refreshPinUI(); }); onValue(cfgRef,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash; updateOfficerUI(); setControlState(); }); onValue(securityRef, snap=>{ const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0; if(lockoutActive()) showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`); else if(ONLINE) hideAlarm(); setControlState(); }); const connectedRef = ref(db, '.info/connected'); onValue(connectedRef, snap=>{ setOnline(snap.val()===true); }); setOnline(true); }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); } })();
+  (async function init(){ const cfgErr = validateConfig(); if(cfgErr || FORCE_OFFLINE){ setOnline(false, cfgErr||'OFFLINE (forced)'); return; } try{ app = initializeApp(firebaseConfig); auth = getAuth(app); try {
+        await signInAnonymously(auth);
+      } catch (err) {
+        if (err && err.code === 'auth/configuration-not-found') {
+          showAlarm('AUTH NOT ENABLED — OFFLINE','Enable Anonymous in Firebase → Authentication → Sign-in method');
+        } else {
+          showAlarm('AUTH ERROR — OFFLINE', String(err && (err.message||err)));
+        }
+        showBanner('AUTH ERROR — OFFLINE');
+        disableControls(true);
+        console.error('[Auth error]', err);
+        return; // abort init early so refs aren't used before ready
+      } onAuthStateChanged(auth, async (user)=>{ if(!user){ setOnline(false, 'AUTH ERROR — OFFLINE'); return; } myUid=user.uid; await appendLocalNoticeUID(); }); db = getDatabase(app); root = ref(db, 'selfDestruct'); cfgRef  = ref(db, 'selfDestruct/config'); securityRef = ref(db, 'selfDestruct/security'); const s = await withTimeout(get(root), 6000); if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() }; const c = await withTimeout(get(cfgRef), 6000); if(c.exists()) { const v=c.val()||{}; officers = v.officers || officers; operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || ''; } else { await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' }); } onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; rendering=true; render(); rendering=false; setControlState(); refreshPinUI(); }); onValue(cfgRef,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash; updateOfficerUI(); setControlState(); }); onValue(securityRef, snap=>{ const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0; if(lockoutActive()) showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`); else if(ONLINE) hideAlarm(); setControlState(); }); const connectedRef = ref(db, '.info/connected'); onValue(connectedRef, snap=>{ setOnline(snap.val()===true); }); setOnline(true); }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); } })();
 
   async function appendLocalNoticeUID(){ try{ const uidText = `This device UID: ${myUid}`; console.log(uidText); await appendLog(`NOTICE: ${uidText}`); }catch(_){} }
 
@@ -369,4 +377,3 @@
   // initial render
   render();
 </script>
-
