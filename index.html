@@ -177,6 +177,16 @@
     <div class="footer">LCARS single‑file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
   </main>
 
+<!-- Drop-in replacement for your <script type="module">…</script>.
+ Adds:
+ 1) Anonymous Auth + Operator UID gate (writes only if this device UID matches config)
+ 2) Break-glass Rekey (Operator PIN + Recovery Token), single-use
+ 3) Rate-limit & TERMINAL LOCKOUT overlay after repeated failures
+ 4) Tamper alarm (MutationObserver) → lockout + log
+ 5) New-device warning on CONTROL unlock
+ 6) Keeps klaxon + TTS from v3
+ NOTE: After you paste this, also update your DB rules (see chat).
+-->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
@@ -234,13 +244,42 @@
   tabCountdown?.addEventListener('click',()=>show('countdown'));
   tabControl?.addEventListener('click',()=>show('control'));
 
-  // ==== Audio (from v3)
+  // ==== Audio (from v3) + optional file SFX loader
   let audioEnabled=false, tickEnabled=true, audioCtx=null;
   function ensureSoundControls(){
     if(document.getElementById('btnToggleSound')) return;
     const t = document.querySelector('.centerCard .timer'); if(!t) return;
-    t.insertAdjacentHTML('afterend', `<div style="margin-top:10px;display:flex;gap:12px;justify-content:center;align-items:center"><button id="btnToggleSound">Enable Sound</button><label style=\"font-size:12px;color:#9fb0c9\"><input id=\"chkTick\" type=\"checkbox\" checked> tick each second</label></div>`);
+    t.insertAdjacentHTML('afterend', `<div style=\"margin-top:10px;display:flex;gap:12px;justify-content:center;align-items:center\"><button id=\"btnToggleSound\">Enable Sound</button><label style=\\"font-size:12px;color:#9fb0c9\\"><input id=\\"chkTick\\" type=\\"checkbox\\" checked> tick each second</label></div>`);
     document.getElementById('btnToggleSound').addEventListener('click',()=>{ audioEnabled=!audioEnabled; if(audioEnabled && !audioCtx){ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); } document.getElementById('btnToggleSound').textContent = audioEnabled? 'Disable Sound':'Enable Sound'; updateAlarmForState(); });
+    document.getElementById('chkTick').addEventListener('change',e=> tickEnabled=e.target.checked);
+  }
+  ensureSoundControls();
+  function speak(text){ if(!audioEnabled) return; const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1; const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0]; if(pref) u.voice=pref; speechSynthesis.speak(u); }
+  function beep(d=120,f=880,v=0.05){ if(!audioEnabled||!audioCtx) return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.value=v; o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d); }
+  // Optional file SFX
+  const SFX = {
+    uiBeep: new Audio('assets/audio/ui-beep.mp3'),
+    uiConfirm: new Audio('assets/audio/ui-confirm.mp3'),
+    klaxon: new Audio('assets/audio/klaxon.mp3'),
+    offline: new Audio('assets/audio/offline-klaxon.mp3')
+  };
+  SFX.klaxon.loop = true; SFX.offline.loop = true;
+  function playSfx(name){ if(!audioEnabled) return; const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch(_){} }
+  function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
+  let alarmTimer=null, alarmKind=null;
+  function startKlaxon(kind){
+    // prefer file SFX when present, else synth fallback
+    if(kind==='offline'){ playSfx('offline'); return; }
+    if(kind==='armed' || kind==='countdown'){ playSfx('klaxon'); return; }
+    // synth fallback
+    if(!audioEnabled) return; stopKlaxon(); if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); alarmKind=kind; const period = kind==='countdown'? 800 : kind==='armed'? 1100 : 1000; alarmTimer=setInterval(()=>{
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sawtooth'; g.gain.value=0; o.connect(g).connect(audioCtx.destination);
+      const t=audioCtx.currentTime; const f1= kind==='offline'? 300 : kind==='armed'? 420 : 620; const f2= kind==='offline'? 220 : kind==='armed'? 520 : 880;
+      o.frequency.setValueAtTime(f1,t); g.gain.linearRampToValueAtTime(0.10,t+0.05); o.frequency.exponentialRampToValueAtTime(f2,t+0.60); g.gain.linearRampToValueAtTime(0.0,t+0.70); o.start(t); o.stop(t+0.72);
+    }, period);
+  }
+  function stopKlaxon(){ clearInterval(alarmTimer); alarmTimer=null; stopSfx('klaxon'); stopSfx('offline'); }
+  function updateAlarmForState(){ let target=null; if(!ONLINE) target='offline'; else if(state.status==='ARMED') target='armed'; else if(state.status==='COUNTDOWN') target='countdown'; if(target!==alarmKind){ stopKlaxon(); if(target && audioEnabled) startKlaxon(target); alarmKind=target; } } });
     document.getElementById('chkTick').addEventListener('change',e=> tickEnabled=e.target.checked);
   }
   ensureSoundControls();
@@ -268,21 +307,36 @@
   function render(){ const s=state.status; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent=fmt.when(state.since); if(s==='COUNTDOWN'){ const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now(); timeLeftEl.textContent=fmt.hhmmss(left); barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%'; countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${(Math.floor(dur/1000)%60).toString().padStart(2,'0')}s from ${new Date(T0).toLocaleTimeString()}`; timeLeftEl.classList.toggle('flash', left<=30000);} else if(s==='ARMED'){ timeLeftEl.textContent='— — : — —'; barFill.style.width='0%'; countdownInfoEl.textContent='Awaiting MARK'; timeLeftEl.classList.remove('flash'); } else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; timeLeftEl.classList.remove('flash'); } else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; countdownInfoEl.textContent='—'; timeLeftEl.classList.remove('flash'); } logEl.innerHTML=(state.log||[]).slice().reverse().join('\n'); updateAlarmForState(); }
 
   // ========= mutation/tamper detector =========
-  let rendering=false; const protectedNodes=[statusPill,timeLeftEl]; const mo=new MutationObserver(muts=>{ if(rendering) return; let suspicious=false; for(const m of muts){ if(protectedNodes.includes(m.target)) { suspicious=true; break; } } if(suspicious){ raiseTamper('DOM mutation in protected elements'); } });
-  protectedNodes.forEach(n=>{ if(n) mo.observe(n,{characterData:true,subtree:true,childList:true}); });
-  async function raiseTamper(reason){ await appendLog(`SECURITY: Tamper detected — ${reason}`); enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED'); }
-
-  function lockoutActive(){ return now() < lockoutUntil; }
-  async function enterLockout(sub){
-    lockoutUntil = now()+5*60*1000;
-    try { if (securityRef) await update(securityRef,{ lockoutUntil }); } catch (_) { /* ignore if auth/db not ready */ }
-    showAlarm('TERMINAL LOCKOUT', sub||'Security cooldown active');
-    speak('Security alert. Terminal lockout engaged.');
-    setControlState();
+  // v4.1 — ignore our own renders + require two strikes within 4s to lockout
+  let rendering = false;
+  const protectedNodes = [statusPill, timeLeftEl];
+  let mo, guardPaused = 0;
+  function attachGuard(){
+    if(mo) try{ mo.disconnect(); }catch(_){}
+    mo = new MutationObserver(muts=>{
+      if(guardPaused) return;
+      // if any protected node was mutated, consider it suspicious
+      for(const m of muts){
+        if(protectedNodes.includes(m.target)){
+          raiseTamperThrottled('DOM mutation in protected elements');
+          break;
+        }
+      }
+    });
+    protectedNodes.forEach(n=>{ if(n) mo.observe(n,{characterData:true,subtree:true,childList:true}); });
   }
-
+  attachGuard();
+  function pauseGuard(fn){ guardPaused++; try{ return fn(); } finally{ guardPaused--; } }
+  let tamperStrikes = 0, tamperTimer = null;
+  function raiseTamperThrottled(reason){
+    tamperStrikes++;
+    appendLog(`SECURITY: Tamper detected — ${reason}`);
+    clearTimeout(tamperTimer);
+    tamperTimer = setTimeout(()=>{ tamperStrikes = 0; }, 4000);
+    if(tamperStrikes >= 2){ enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED'); tamperStrikes = 0; }
+  }
   // ========= timer + last‑5 spoken =========
-  let lastSpokenSec=null; setInterval(()=>{ if(state.status==='COUNTDOWN'){ rendering=true; render(); rendering=false; const left=(state.startAt||0)+(state.durationMs||0)-now(); const sec=Math.ceil(left/1000); if(tickEnabled && audioEnabled && sec>0 && (sec!==window.__lastSec)){ window.__lastSec=sec; beep(70, left<=5000?1200: left<=30000?1000:700, left<=30000?0.09:0.05);} if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)); } if(left<=0 && state.status!=='DETONATED'){ setStatus('DETONATED'); appendLog('*** DETONATION ***'); speak('Auto destruct complete. Goodbye.'); stopKlaxon(); } setControlState(); } }, 200);
+  let lastSpokenSec=null; setInterval(()=>{ if(state.status==='COUNTDOWN'){ rendering=true; pauseGuard(()=>render()); rendering=false; const left=(state.startAt||0)+(state.durationMs||0)-now(); const sec=Math.ceil(left/1000); if(tickEnabled && audioEnabled && sec>0 && (sec!==window.__lastSec)){ window.__lastSec=sec; beep(70, left<=5000?1200: left<=30000?1000:700, left<=30000?0.09:0.05);} if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)); } if(left<=0 && state.status!=='DETONATED'){ setStatus('DETONATED'); appendLog('*** DETONATION ***'); speak('Auto destruct complete. Goodbye.'); stopKlaxon(); } setControlState(); } }, 200);
 
   // ========= crypto =========
   async function sha256(str){ const enc=new TextEncoder().encode(str); const buf=await crypto.subtle.digest('SHA-256', enc); return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
@@ -305,7 +359,7 @@
         disableControls(true);
         console.error('[Auth error]', err);
         return; // abort init early so refs aren't used before ready
-      } onAuthStateChanged(auth, async (user)=>{ if(!user){ setOnline(false, 'AUTH ERROR — OFFLINE'); return; } myUid=user.uid; await appendLocalNoticeUID(); }); db = getDatabase(app); root = ref(db, 'selfDestruct'); cfgRef  = ref(db, 'selfDestruct/config'); securityRef = ref(db, 'selfDestruct/security'); const s = await withTimeout(get(root), 6000); if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() }; const c = await withTimeout(get(cfgRef), 6000); if(c.exists()) { const v=c.val()||{}; officers = v.officers || officers; operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || ''; } else { await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' }); } onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; rendering=true; render(); rendering=false; setControlState(); refreshPinUI(); }); onValue(cfgRef,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash; updateOfficerUI(); setControlState(); }); onValue(securityRef, snap=>{ const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0; if(lockoutActive()) showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`); else if(ONLINE) hideAlarm(); setControlState(); }); const connectedRef = ref(db, '.info/connected'); onValue(connectedRef, snap=>{ setOnline(snap.val()===true); }); setOnline(true); }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); } })();
+      } onAuthStateChanged(auth, async (user)=>{ if(!user){ setOnline(false, 'AUTH ERROR — OFFLINE'); return; } myUid=user.uid; await appendLocalNoticeUID(); }); db = getDatabase(app); root = ref(db, 'selfDestruct'); cfgRef  = ref(db, 'selfDestruct/config'); securityRef = ref(db, 'selfDestruct/security'); const s = await withTimeout(get(root), 6000); if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() }; const c = await withTimeout(get(cfgRef), 6000); if(c.exists()) { const v=c.val()||{}; officers = v.officers || officers; operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || ''; } else { await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' }); } onValue(root, snap=>{ const v=snap.val()||{}; state={...state, ...v}; rendering=true; pauseGuard(()=>render()); rendering=false; setControlState(); refreshPinUI(); }); onValue(cfgRef,  snap=>{ const v=snap.val()||{}; officers = v.officers? v.officers : officers; operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash; updateOfficerUI(); setControlState(); }); onValue(securityRef, snap=>{ const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0; if(lockoutActive()) showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`); else if(ONLINE) hideAlarm(); setControlState(); }); const connectedRef = ref(db, '.info/connected'); onValue(connectedRef, snap=>{ setOnline(snap.val()===true); }); setOnline(true); }catch(err){ console.error('[Firebase error]', err); setOnline(false, 'FIREBASE ERROR — OFFLINE'); } })();
 
   async function appendLocalNoticeUID(){ try{ const uidText = `This device UID: ${myUid}`; console.log(uidText); await appendLog(`NOTICE: ${uidText}`); }catch(_){} }
 
@@ -375,5 +429,5 @@
   $('#btnReset')?.addEventListener('click', async ()=>{ if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active'); if(!ONLINE) return alert('System offline.'); if(!isOperator || !unlocked) return; const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] }; await set(root, newState); await update(cfgRef,{ officers }); speak('System reset to idle.'); stopKlaxon(); setControlState(); });
 
   // initial render
-  render();
+  pauseGuard(()=>render());
 </script>
