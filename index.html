@@ -180,9 +180,7 @@
 <script type="module">
   // ───────────────── Firebase SDKs ─────────────────
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-  import {
-    getDatabase, ref, onValue, update, set, get, child
-  } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+  import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
   import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
   // ───────────────── Config (yours) ─────────────────
@@ -210,7 +208,7 @@
   const qs = new URLSearchParams(location.search);
   const FORCE_OFFLINE = qs.has('offline');
 
-  // ───────────────── Big overlays ─────────────────
+  // ───────────────── Overlays ─────────────────
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
@@ -316,7 +314,7 @@
     o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d);
   }
 
-  // Optional file SFX (will play if files exist in your repo)
+  // Optional file SFX (auto-used if files exist)
   const SFX = {
     uiBeep: new Audio('assets/audio/ui-beep.mp3'),
     uiConfirm: new Audio('assets/audio/ui-confirm.mp3'),
@@ -325,7 +323,7 @@
   };
   SFX.klaxon.loop = true; SFX.offline.loop = true;
   function playSfx(name){ if(!audioEnabled) return;
-    const a = SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
+    const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
   function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
 
   let alarmKind=null;
@@ -370,7 +368,7 @@
     updateAlarmForState(); setControlState();
   }
 
-  // ───────────────── Render (guarded) ─────────────────
+  // ───────────────── Render (guard-paused) ─────────────────
   function render(){
     const s=state.status;
     if(statusPill){ statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); }
@@ -397,25 +395,32 @@
     if(logEl) logEl.innerHTML=(state.log||[]).slice().reverse().join('\n');
     updateAlarmForState();
   }
-
-  // ───────────────── Tamper detector (v4.1) ─────────────────
-  const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
-  let guardPaused = 0, tamperStrikes = 0, tamperTimer = null;
-  const mo = new MutationObserver(muts=>{
-    if(guardPaused) return;
-    for(const m of muts){
-      if(protectedNodes.includes(m.target)){
-        appendLog('SECURITY: Tamper detected — DOM mutation in protected elements');
-        clearTimeout(tamperTimer);
-        tamperStrikes++;
-        tamperTimer = setTimeout(()=> tamperStrikes=0, 4000);
-        if(tamperStrikes>=2) enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED');
-        break;
-      }
-    }
-  });
-  protectedNodes.forEach(n=> mo.observe(n,{characterData:true,subtree:true,childList:true}));
   const pauseGuard = fn => { guardPaused++; try { return fn(); } finally { guardPaused--; } };
+
+  // ───────────────── Tamper detector (hardened) ─────────────────
+  const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
+  const protectedSet = new Set(protectedNodes);
+  let guardPaused = 0, tamperStrikes = 0, tamperTimer = null, mo;
+
+  function attachGuard(){
+    if(mo) try{ mo.disconnect(); }catch{}
+    mo = new MutationObserver(muts=>{
+      if(guardPaused) return;
+      for(const m of muts){
+        if(m.type!=='characterData') continue;
+        const host = m.target && m.target.parentNode;
+        if(host && protectedSet.has(host)){
+          appendLog('SECURITY: Tamper detected — DOM mutation in protected elements');
+          clearTimeout(tamperTimer);
+          tamperStrikes++;
+          tamperTimer = setTimeout(()=> tamperStrikes=0, 5000); // 5s window
+          if(tamperStrikes>=3) enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED');
+          break;
+        }
+      }
+    });
+    protectedNodes.forEach(n=> mo.observe(n,{ characterData:true, subtree:true, childList:false, attributes:false }));
+  }
 
   // ───────────────── Timer + last-5 spoken ─────────────────
   let lastSpokenSec=null;
@@ -487,6 +492,8 @@
       cfgRef  = ref(db, 'selfDestruct/config');
       securityRef = ref(db, 'selfDestruct/security');
 
+      let firstRootSnap = true;
+
       const s = await withTimeout(get(root), 6000);
       if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() };
 
@@ -501,6 +508,7 @@
       onValue(root, snap=>{
         const v=snap.val()||{}; state={...state, ...v};
         pauseGuard(render); setControlState(); refreshPinUI();
+        if(firstRootSnap){ firstRootSnap=false; setTimeout(attachGuard, 1000); }
       });
       onValue(cfgRef, snap=>{
         const v=snap.val()||{}; officers = v.officers? v.officers : officers;
@@ -532,7 +540,7 @@
   }
   async function write(patch){ assertOnline(); return update(root, patch); }
   async function writeCfg(patch){ assertOnline(); return update(cfgRef, patch); }
-  async function writeSec(patch){ return update(securityRef, patch); }
+  async function writeSec(patch){ try{ return update(securityRef, patch); }catch{} }
   async function appendLog(line){
     try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`;
       state.log=(state.log||[]).slice(-99).concat(e);
@@ -750,6 +758,7 @@
     speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
   });
 
-  // ───────────────── Boot render ─────────────────
-  render();
+  // ───────────────── Boot render (guard-paused) ─────────────────
+  pauseGuard(render);
 </script>
+
