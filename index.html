@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self-Destruct Console — v5 MAX (All Modules + Live Debug)</title>
+<title>LCARS Self-Destruct Console — v5.1.4 MAX (Hotfix)</title>
 <style>
   :root{
     --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6;
@@ -62,7 +62,7 @@
   .denied{color:#ff9b9b; font-weight:900; letter-spacing:.18em; text-transform:uppercase}
 
   #topBanner{position:fixed; left:0; right:0; top:0; z-index:25; padding:10px 16px; text-align:center; font-weight:900; letter-spacing:.18em; text-transform:uppercase; border-bottom:2px solid #300; background:#1a0000; color:#ff9b9b; display:none}
-  .footer{margin:30px 0 50px; text-align:center; color:#9fb0c9; font-size:12px}
+  .footer{margin:30px 0 60px; text-align:center; color:#9fb0c9; font-size:12px}
 
   /* Global alarm / lockout */
   #globalAlert{position:fixed;inset:0;display:none;z-index:10000;
@@ -161,6 +161,7 @@
 
     <!-- CONTROL VIEW (PIN-gated) -->
     <div id="viewControl">
+
       <!-- Operator admin -->
       <section class="card" id="operatorCard">
         <h2>OPERATOR DEVICE</h2>
@@ -191,6 +192,7 @@
         <p class="muted" style="margin-top:6px">Token is single-use; only the hash is stored.</p>
       </section>
 
+      <!-- Officer setup (one-time) -->
       <section class="card" id="officerSetupSection">
         <h2>OFFICERS — ONE-TIME SETUP</h2>
         <div class="two">
@@ -211,6 +213,7 @@
         <p>SET & LOCKED</p>
       </section>
 
+      <!-- Two-officer verify -->
       <section class="card">
         <h2>ARMING — VERIFY</h2>
         <div class="two">
@@ -227,6 +230,7 @@
         </div>
       </section>
 
+      <!-- Countdown controls -->
       <section class="card">
         <h2>COUNTDOWN</h2>
         <div class="two">
@@ -241,10 +245,18 @@
       </section>
     </div>
 
-    <div class="footer">LCARS single-file · Firebase Realtime DB · Operator-only control · DevTools/tamper guards · SFX/TTS · Brick Mode · Live Debug</div>
+    <div class="footer">
+      LCARS single-file · Firebase Realtime DB · Operator-only control · DevTools/tamper guards · SFX/TTS · Brick Mode · Live Debug
+      <div id="buildTag" style="margin-top:6px;opacity:.7"></div>
+    </div>
   </main>
 
 <script type="module">
+  // ====== BUILD TAG (so you know this exact file loaded) ======
+  const BUILD = "v5.1.4-max-hotfix; 2025-08-29 00:00Z";
+  console.log("[LCARS] Loaded build:", BUILD);
+  document.addEventListener('DOMContentLoaded', ()=>{ const el=document.getElementById('buildTag'); if(el) el.textContent = "BUILD " + BUILD; });
+
   // ───────────────── Firebase SDKs ─────────────────
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
@@ -358,8 +370,7 @@
     offline: new Audio('assets/audio/offline-klaxon.mp3')
   };
   SFX.klaxon.loop = true; SFX.offline.loop = true;
-  function playSfx(name){ if(!audioEnabled) return;
-    const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
+  function playSfx(name){ if(!audioEnabled) return; const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
   function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
 
   let alarmKind=null;
@@ -412,7 +423,6 @@
   const originalSetInterval = window.setInterval.bind(window);
   const originalAddEventListener = window.addEventListener.bind(window);
   let trackedIntervals = [], brickApplied=false;
-  function every(ms, fn){ const id = originalSetInterval(()=>{ if(!brickApplied) fn(); }, ms); trackedIntervals.push(id); return id; }
   function neutralizeHandlers(){
     const blocker = e=>{ if(brickApplied){ e.stopImmediatePropagation(); e.preventDefault(); } };
     ['click','mousedown','mouseup','touchstart','keydown','keypress','keyup','submit','input','change','contextmenu'].forEach(ev=>{
@@ -469,7 +479,7 @@
     updateAlarmForState();
   }
 
-  // ───────────────── Tamper guard (characterData, 3 strikes/5s) ─────────────────
+  // ───────────────── Tamper guard ─────────────────
   const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
   const protectedSet = new Set(protectedNodes);
   let tamperStrikes = 0, tamperTimer = null, mo;
@@ -491,7 +501,7 @@
     protectedNodes.forEach(n=> mo.observe(n,{ characterData:true, subtree:true, childList:false, attributes:false }));
   }
 
-  // ───────────────── DevTools lockout (2 strikes/5s; bypass ?maint=1) ─────────────────
+  // ───────────────── DevTools lockout ─────────────────
   let dtStrikes=0, dtTimer=null;
   const devtoolsLikelyOpen=()=>{ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T); };
   function checkDevtools(){ if(MAINT) return; if(devtoolsLikelyOpen()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) { lastLockReason='DEVELOPER TOOLS OPENED'; enterLockout(lastLockReason); } } }
@@ -585,7 +595,7 @@
         await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' });
       }
 
-      // Fine-grained real-time listeners
+      // Fine-grained real-time listeners (public)
       onValue(ref(db,'selfDestruct/status'), snap=>{ state.status=snap.val()||'IDLE'; pauseGuard(render); setControlState(); });
       onValue(ref(db,'selfDestruct/since'),  snap=>{ state.since=snap.val()||now(); pauseGuard(render); });
       onValue(ref(db,'selfDestruct/startAt'),snap=>{ state.startAt=snap.val()||null; pauseGuard(render); });
@@ -604,18 +614,20 @@
         setControlState();
       });
 
+      // Config + sensitive (operator only)
       onValue(cfgRef, snap=>{
         const v=snap.val()||{}; officers = v.officers? v.officers : officers;
         operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash;
         updateOfficerUI(); setControlState();
-        // Attach sensitive listeners if this device is operator
         if(myUid && operatorUid === myUid) startOperatorOnlyListeners();
       });
 
+      // Public log mirror
       onValue(ref(db,'selfDestruct/logPublic'), snap=>{
-        const arr=snap.val()||[]; logEl.innerHTML = arr.slice().reverse().join('\n');
+        const arr=snap.val()||[]; if(logEl) logEl.innerHTML = arr.slice().reverse().join('\n');
       });
 
+      // Lockout channel
       onValue(securityRef, snap=>{
         const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0;
         if(lockoutActive() && !DEBUG_MODE){
@@ -642,13 +654,12 @@
   })();
 
   function startOperatorOnlyListeners(){
-    // Only attach once
     if(startOperatorOnlyListeners._wired) return;
     startOperatorOnlyListeners._wired=true;
     onValue(ref(db,'selfDestruct/controlKeyHash'), s=>{ state.controlKeyHash=s.val()||null; refreshPinUI(); });
     onValue(ref(db,'selfDestruct/armedAt'), s=>{ state.armedAt=s.val()||null; });
-    onValue(ref(db,'selfDestruct/auth1'), s=>{/*no render*/});
-    onValue(ref(db,'selfDestruct/auth2'), s=>{/*no render*/});
+    onValue(ref(db,'selfDestruct/auth1'), s=>{/*private*/});
+    onValue(ref(db,'selfDestruct/auth2'), s=>{/*private*/});
   }
 
   // ───────────────── DB helpers ─────────────────
@@ -663,13 +674,13 @@
   async function appendLog(line){
     try{
       const e=`[${new Date().toLocaleTimeString()}] ${line}`;
-      // Private log
+      // Private log (best-effort)
       try{
         const pr = await get(child(root,'log'));
         const priv=(pr.exists()? pr.val():[]).slice(-99); priv.push(e);
         await update(root, { log: priv });
       }catch{}
-      // Public log (scrubbed)
+      // Public mirror (scrubbed UIDs)
       const sp = await get(child(root,'logPublic'));
       const pub=(sp.exists()? sp.val():[]).slice(-99); pub.push(e.replace(/[A-Za-z0-9_-]{28,}/g,'[UID]'));
       await update(root, { logPublic: pub });
@@ -710,9 +721,14 @@
     }
   }
 
+  // ——— SINGLE definition; no duplicates ———
   function officersAreLocked(){
-    return !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
+    try{
+      return !!(officers && officers.locked && officers.o1 && officers.o2 &&
+                officers.o1.codeHash && officers.o2.codeHash);
+    }catch{ return false; }
   }
+
   function updateOfficerUI(){
     if(!officerSetupSection || !officerLockedMsg) return;
     if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
@@ -788,14 +804,11 @@
   }
 
   // ───────────────── PIN ─────────────────
-  function refreshPinUI(){ if(!btnSetPin) return;
-    btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block';
-  }
-  btnSetPin?.addEventListener('click', async ()=>{
+  function refreshPinUI(){ if(!btnSetPin) return; btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block'; }
+  $('#btnSetPin')?.addEventListener('click', async ()=>{
     try{
       if(!ONLINE) return alert('System offline.');
       if(state.controlKeyHash) return alert('PIN already set.');
-      // claim operator if null
       const cur = (await get(child(cfgRef,'operatorUid'))).val() ?? null;
       if(cur===null && myUid) await writeCfg({ operatorUid: myUid });
       const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
@@ -805,7 +818,7 @@
     }catch(e){ if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied'); }
   });
 
-  btnUnlock?.addEventListener('click', async ()=>{
+  $('#btnUnlock')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE) return alert('System offline.');
     const pin=$('#pin').value.trim(); if(!pin) return;
@@ -815,7 +828,6 @@
     }
     unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none';
     setControlState(); speak('Access granted.');
-    // new device notice
     const ua = (navigator.userAgent||'')+'|'+(navigator.platform||''); const uah = await sha256(ua);
     try{
       const lastSnap = await get(child(securityRef,'lastOperatorUAHash'));
@@ -825,13 +837,7 @@
   });
 
   // ───────────────── Officers ─────────────────
-  function updateOfficerUI(){
-    if(!officerSetupSection || !officerLockedMsg) return;
-    if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
-    else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; }
-  }
-
-  btnSaveOfficers?.addEventListener('click', async ()=>{
+  $('#btnSaveOfficers')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     try{
       assertOnline(); if(!unlocked) return alert('Unlock CONTROL first');
@@ -847,7 +853,7 @@
   });
 
   // ───────────────── Controls ─────────────────
-  btnArm?.addEventListener('click', async ()=>{
+  $('#btnArm')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='IDLE') return;
     if(!officersAreLocked()) return alert('Set officers first.');
@@ -869,7 +875,7 @@
     setControlState(); updateAlarmForState();
   });
 
-  btnDisarm?.addEventListener('click', async ()=>{
+  $('#btnDisarm')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
     if(state.status!=='ARMED') return alert('Disarm available only when ARMED.');
@@ -878,7 +884,7 @@
     stopSfx('klaxon'); setControlState();
   });
 
-  btnStart?.addEventListener('click', async ()=>{
+  $('#btnStart')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='ARMED') return;
     const m=Math.max(0, parseInt($('#mins').value||'0',10));
@@ -890,7 +896,7 @@
     setControlState(); updateAlarmForState();
   });
 
-  btnAbort?.addEventListener('click', async ()=>{
+  $('#btnAbort')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='COUNTDOWN') return;
     const left = (state.startAt||0)+(state.durationMs||0)-now();
@@ -899,7 +905,7 @@
     stopSfx('klaxon'); setControlState();
   });
 
-  btnReset?.addEventListener('click', async ()=>{
+  $('#btnReset')?.addEventListener('click', async ()=>{
     if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
     if(!(['ABORTED','DETONATED'].includes(state.status))) return alert('Reset after ABORTED/DETONATED only.');
@@ -909,8 +915,14 @@
     speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
   });
 
-  // ───────────────── Boot render + start guard after first data ─────────────────
+  // Boot render + start guard after first data
   pauseGuard(render);
+
+  // Minimal global error hook so failures are visible
+  window.addEventListener('error', e=>{
+    console.error('[JS error]', e.message);
+    try{ appendLog('CLIENT ERROR: '+e.message); }catch{}
+  });
 </script>
 </body>
 </html>
