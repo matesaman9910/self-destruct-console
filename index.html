@@ -5,13 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>LCARS Self-Destruct Console</title>
 <style>
-  :root{
-    --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6;
-    --lcars-amber:#ffb400; --lcars-red:#ff3b3b; --line:#20242d;
-    --ok:#2be4a1; --warn:#ffb400; --alert:#ff3b3b;
-  }
+  :root{ --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6; --lcars-amber:#ffb400; --lcars-red:#ff3b3b; --line:#20242d; --ok:#2be4a1; --warn:#ffb400; --alert:#ff3b3b; }
   *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
   header{position:sticky; top:0; z-index:20; padding:10px 14px; background:linear-gradient(180deg,#0f1117,#0a0c10); border-bottom:2px solid var(--line)}
   .lcars{display:flex; align-items:center; gap:14px}
   .lcars .bar{height:24px; width:160px; border-radius:12px 0 0 12px; background:var(--lcars-amber)}
@@ -23,7 +19,6 @@
 
   main{max-width:1200px; margin:0 auto; padding:22px}
 
-  /* COUNTDOWN view — big & centered */
   #viewCountdown{display:grid; grid-template-columns:1fr; gap:18px}
   .centerCard{background:linear-gradient(180deg,#161b28,#111621); border:1px solid #202c3d; border-radius:18px; padding:22px; display:flex; flex-direction:column; align-items:center; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.35)}
   .centerCard h2{margin:0 0 12px 0; letter-spacing:.12em; text-transform:uppercase}
@@ -44,7 +39,6 @@
   .flash{animation:flash .8s steps(4) infinite}
   @keyframes flash{50%{opacity:.35}}
 
-  /* CONTROL view */
   #viewControl{display:none; grid-template-columns:1fr 1fr; gap:18px}
   .card{background:linear-gradient(180deg,#161b28,#111621); border:1px solid #202c3d; border-radius:18px; padding:18px}
   .card h2{margin:0 0 12px 0; letter-spacing:.12em; text-transform:uppercase}
@@ -79,7 +73,6 @@
 
   <div id="topBanner">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</div>
 
-  <!-- CONTROL pin gate (only when opening CONTROL) -->
   <div id="gateOverlay" class="overlay">
     <div class="gate">
       <h3>ACCESS CONTROL</h3>
@@ -98,7 +91,6 @@
   </div>
 
   <main>
-    <!-- COUNTDOWN VIEW (public) -->
     <div id="viewCountdown">
       <section class="centerCard">
         <h2>SELF-DESTRUCT STATUS</h2>
@@ -122,7 +114,6 @@
       </section>
     </div>
 
-    <!-- CONTROL VIEW (PIN-gated) -->
     <div id="viewControl">
       <section class="card" id="officerSetupSection">
         <h2>OFFICERS — ONE-TIME SETUP</h2>
@@ -201,16 +192,12 @@
       return (h>0?pad2(h)+':':'')+pad2(m)+':'+pad2(s); },
     when(ts){ return ts? new Date(ts).toLocaleString(): '–'; }
   };
-  const norm = s => (s||'')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase()
-    .replace(/[^a-z0-9 .'\-_]+/g,'')
-    .trim()
-    .replace(/\s+/g,' ');
+  const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 .'\-_]+/g,'').trim().replace(/\s+/g,' ');
   const qs = new URLSearchParams(location.search);
   const FORCE_OFFLINE = qs.has('offline');
   const MAINT = qs.has('maint');
 
+  // Overlay + lockout info lines
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
@@ -226,14 +213,13 @@
         font-size:clamp(32px,7vw,120px);color:#ff6b6b;
         text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);
         animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
-      #globalAlert .sub{margin-top:14px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3;opacity:.9;letter-spacing:.14em}
+      #globalAlert .sub{margin-top:10px;font-size:clamp(12px,1.5vw,18px);color:#ffb3b3;letter-spacing:.12em}
+      #globalAlert .sub .k{color:#ffc7c7}
       @keyframes alarmPulse{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
       @keyframes alarmGlow{0%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}
         50%{text-shadow:0 0 12px #ff3f3f,0 0 24px #ff3f3f,0 0 48px #ff3f3f,0 0 80px rgba(255,0,0,.6)}
         100%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}}
-      #topBanner{position:fixed;left:0;right:0;top:0;z-index:9999;padding:12px 16px;
-        text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;
-        border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
+      #topBanner{position:fixed;left:0;right:0;top:0;z-index:9999;padding:12px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
     `;
     document.head.appendChild(style);
   })();
@@ -243,8 +229,12 @@
     alarm = document.createElement('div');
     alarm.id='globalAlert';
     alarm.innerHTML = `
-      <div class="msg"><span id="alarmMain">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</span>
+      <div class="msg">
+        <div id="alarmMain">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</div>
         <div id="alarmSub" class="sub">Firebase unreachable · controls disabled</div>
+        <div id="lkReason" class="sub" style="display:none"><span class="k">Reason:</span> <span id="lkReasonTxt"></span></div>
+        <div id="lkRemain" class="sub" style="display:none"><span class="k">Remaining:</span> <span id="lkRemainTxt"></span></div>
+        <div id="lkUid" class="sub" style="display:none"><span class="k">Device UID:</span> <span id="lkUidTxt"></span></div>
       </div>`;
     document.body.appendChild(alarm);
   }
@@ -254,7 +244,7 @@
     banner.textContent='SELF DESTRUCT SYSTEM DAMAGED — OFFLINE';
     document.body.prepend(banner);
   }
-  const showAlarm=(main,sub)=>{ document.getElementById('alarmMain').textContent=main||'ALERT'; document.getElementById('alarmSub').textContent=sub||''; alarm.style.display='flex'; };
+  const showAlarm=(main,sub)=>{ $('#alarmMain').textContent=main||'ALERT'; $('#alarmSub').textContent=sub||''; alarm.style.display='flex'; };
   const hideAlarm=()=>{ alarm.style.display='none'; };
   const showBanner=(txt)=>{ banner.textContent=txt||'ALERT'; banner.style.display='block'; };
   const hideBanner=()=>{ banner.style.display='none'; };
@@ -314,13 +304,7 @@
     o.type='sine'; o.frequency.value=f; g.gain.value=v;
     o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d);
   }
-
-  const SFX = {
-    uiBeep: new Audio('assets/audio/ui-beep.mp3'),
-    uiConfirm: new Audio('assets/audio/ui-confirm.mp3'),
-    klaxon: new Audio('assets/audio/klaxon.mp3'),
-    offline: new Audio('assets/audio/offline-klaxon.mp3')
-  };
+  const SFX = { uiBeep:new Audio('assets/audio/ui-beep.mp3'), uiConfirm:new Audio('assets/audio/ui-confirm.mp3'), klaxon:new Audio('assets/audio/klaxon.mp3'), offline:new Audio('assets/audio/offline-klaxon.mp3') };
   SFX.klaxon.loop = true; SFX.offline.loop = true;
   function playSfx(name){ if(!audioEnabled) return; const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
   function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
@@ -340,24 +324,51 @@
     if(target!==alarmKind){ startKlaxon(target); alarmKind=target; }
   }
 
-  let state = {
-    status:'IDLE', since:now(), auth1:null, auth2:null,
-    startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`],
-    controlKeyHash:null
-  };
+  let state = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`], controlKeyHash:null };
   let officers = { locked:false, o1:{name:'', nameNorm:'', codeHash:''}, o2:{name:'', nameNorm:'', codeHash:''} };
   let unlocked=false, ONLINE=false, myUid=null, operatorUid=null, isOperator=false;
   let lockoutUntil=0, offlineVoiced=false, rekeyKeyHash='';
+  let lockoutTimer=null, brickApplied=false, lastLockReason='';
 
   function disableControls(dis){ [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = dis; }); }
   function lockoutActive(){ return now() < lockoutUntil; }
+
+  function updateLockoutOverlay(){
+    if(!lockoutActive()) return;
+    $('#lkReason').style.display='block';
+    $('#lkRemain').style.display='block';
+    $('#lkUid').style.display='block';
+    $('#lkReasonTxt').textContent = lastLockReason || 'Policy';
+    $('#lkUidTxt').textContent = myUid || '—';
+    const ms = Math.max(0, lockoutUntil - now());
+    $('#lkRemainTxt').textContent = fmt.hhmmss(ms);
+  }
+
+  function brickUI(){
+    if(brickApplied) return;
+    brickApplied = true;
+    try{
+      // Remove CONTROL view and gate entirely
+      const vc = document.getElementById('viewControl'); if(vc) vc.innerHTML = '';
+      const go = document.getElementById('gateOverlay'); if(go) go.remove();
+      // Disable all interactive elements
+      for(const el of document.querySelectorAll('button,input,select,textarea')) { el.disabled = true; }
+      // Kill common handlers by cloning body children (drops listeners)
+      for(const el of Array.from(document.body.children)){
+        if(el.id==='globalAlert' || el.id==='topBanner' || el.tagName==='SCRIPT' || el.tagName==='STYLE' || el.tagName==='LINK') continue;
+        el.replaceWith(el.cloneNode(true));
+      }
+    }catch{}
+  }
+
   function setOnline(ok, msg){
     ONLINE=ok;
     if(ok){
       if(lockoutActive()){
-        showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`);
-      } else { hideAlarm(); }
-      hideBanner(); disableControls(false); offlineVoiced=false;
+        showAlarm('TERMINAL LOCKOUT', `Security cooldown active`);
+        lastLockReason = lastLockReason || 'Security policy';
+        updateLockoutOverlay(); brickUI();
+      } else { hideAlarm(); hideBanner(); disableControls(false); offlineVoiced=false; }
     } else {
       showAlarm('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', msg||'Firebase unreachable · controls disabled');
       showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true);
@@ -396,6 +407,7 @@
     updateAlarmForState();
   }
 
+  // Tamper guard
   const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
   const protectedSet = new Set(protectedNodes);
   let tamperStrikes = 0, tamperTimer = null, mo;
@@ -417,6 +429,7 @@
     protectedNodes.forEach(n=> mo.observe(n,{ characterData:true, subtree:true, childList:false, attributes:false }));
   }
 
+  // DevTools lockout
   let dtStrikes=0, dtTimer=null;
   const devtoolsLikelyOpen=()=>{ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T); };
   function checkDevtools(){ if(MAINT) return; if(devtoolsLikelyOpen()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) enterLockout('DEVELOPER TOOLS OPENED'); } }
@@ -424,6 +437,7 @@
   window.addEventListener('resize',checkDevtools);
   window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools(); });
 
+  // Countdown sound/voice
   let lastSpokenSec=null;
   setInterval(()=>{
     if(state.status!=='COUNTDOWN') return;
@@ -446,10 +460,7 @@
     const buf=await crypto.subtle.digest('SHA-256', enc);
     return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
   }
-  function genTokenHex(len=64){
-    const b=new Uint8Array(len/2); crypto.getRandomValues(b);
-    return [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
-  }
+  function genTokenHex(len=64){ const b=new Uint8Array(len/2); crypto.getRandomValues(b); return [...b].map(x=>x.toString(16).padStart(2,'0')).join(''); }
 
   function validateConfig(){
     const cfg=firebaseConfig;
@@ -472,15 +483,9 @@
       try {
         await signInAnonymously(auth);
       } catch (err) {
-        if (err && err.code === 'auth/configuration-not-found') {
-          showAlarm('AUTH NOT ENABLED — OFFLINE', 'Enable Anonymous in Firebase → Authentication → Sign-in method');
-        } else {
-          showAlarm('AUTH ERROR — OFFLINE', String(err && (err.message||err)));
-        }
-        showBanner('AUTH ERROR — OFFLINE');
-        disableControls(true);
-        console.error('[Auth error]', err);
-        return;
+        showAlarm('AUTH ERROR — OFFLINE', (err && err.code) || 'auth');
+        showBanner('AUTH ERROR — OFFLINE'); disableControls(true);
+        console.error('[Auth error]', err); return;
       }
 
       onAuthStateChanged(auth, async (user)=>{
@@ -496,27 +501,12 @@
 
       let firstRootSnap = true;
 
-      // SAFE BOOTSTRAP — read only; do not create root; only minimal config keys if missing
-      try {
-        const s = await withTimeout(get(root), 6000);
-        if (s.exists()) state = { ...state, ...s.val() };
-      } catch (e) {
-        console.warn('[root read skipped]', e);
-      }
-
+      try { const s = await withTimeout(get(root), 6000); if (s.exists()) state = { ...state, ...s.val() }; } catch (e) { console.warn('[root read skipped]', e); }
       try {
         const c = await withTimeout(get(cfgRef), 6000);
-        if (c.exists()) {
-          const v = c.val() || {};
-          officers     = v.officers || officers;
-          operatorUid  = v.operatorUid ?? null;
-          rekeyKeyHash = v.rekeyKeyHash || '';
-        } else {
-          await update(cfgRef, { operatorUid: null, rekeyKeyHash: '' });
-        }
-      } catch (e) {
-        console.warn('[config bootstrap skipped]', e);
-      }
+        if (c.exists()) { const v = c.val() || {}; officers = v.officers || officers; operatorUid = v.operatorUid ?? null; rekeyKeyHash = v.rekeyKeyHash || ''; }
+        else { await update(cfgRef, { operatorUid: null, rekeyKeyHash: '' }); }
+      } catch (e) { console.warn('[config bootstrap skipped]', e); }
 
       onValue(root, snap=>{
         const v=snap.val()||{}; state={...state, ...v};
@@ -530,8 +520,16 @@
       });
       onValue(securityRef, snap=>{
         const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0;
-        if(lockoutActive()) showAlarm('TERMINAL LOCKOUT', `Security cooldown until ${new Date(lockoutUntil).toLocaleTimeString()}`);
-        else if(ONLINE) hideAlarm();
+        if(lockoutActive()){
+          lastLockReason = lastLockReason || 'Security policy';
+          showAlarm('TERMINAL LOCKOUT', `Security cooldown active`);
+          updateLockoutOverlay(); brickUI();
+          if(lockoutTimer) clearInterval(lockoutTimer);
+          lockoutTimer = setInterval(()=> updateLockoutOverlay(), 500);
+        } else {
+          if(lockoutTimer) clearInterval(lockoutTimer);
+          if(ONLINE) hideAlarm();
+        }
         setControlState();
       });
 
@@ -545,11 +543,7 @@
     }
   })();
 
-  function assertOnline(){
-    if(!ONLINE) throw new Error('OFFLINE');
-    if(lockoutActive()) throw new Error('LOCKOUT');
-    if(!isOperator) throw new Error('NOT_OPERATOR');
-  }
+  function assertOnline(){ if(!ONLINE) throw new Error('OFFLINE'); if(lockoutActive()) throw new Error('LOCKOUT'); if(!isOperator) throw new Error('NOT_OPERATOR'); }
   async function write(patch){ assertOnline(); return update(root, patch); }
   async function writeCfg(patch){ return update(cfgRef, patch); }
   async function writeSec(patch){ try{ return update(securityRef, patch); }catch{} }
@@ -559,13 +553,14 @@
       await update(root, { log: state.log });
     }catch{}
   }
-  function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch{ return; } }
+  function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch(e){ appendLog('ERROR: setStatus failed'); return; } }
 
   async function enterLockout(sub){
+    lastLockReason = sub || 'Security policy';
     lockoutUntil = now()+5*60*1000;
     try { if (securityRef) await update(securityRef,{ lockoutUntil }); } catch {}
-    showAlarm('TERMINAL LOCKOUT', sub||'Security cooldown active');
-    speak('Security alert. Terminal lockout engaged.');
+    await appendLog(`LOCKOUT: ${lastLockReason} (uid ${myUid||'—'})`);
+    showAlarm('TERMINAL LOCKOUT', 'Security cooldown active'); updateLockoutOverlay(); brickUI(); speak('Security alert. Terminal lockout engaged.');
     setControlState();
   }
 
@@ -582,10 +577,7 @@
     if(btnSaveOfficers) btnSaveOfficers.disabled = opBlock || !ONLINE || !unlocked || officersAreLocked();
 
     const opCard = document.getElementById('operatorCard');
-    if(opCard){
-      opCard.querySelector('#uidVal').textContent = myUid || '—';
-      opCard.querySelector('#opStatus').textContent = isOperator? 'OPERATOR DEVICE' : 'VIEWER DEVICE';
-    }
+    if(opCard){ opCard.querySelector('#uidVal').textContent = myUid || '—'; opCard.querySelector('#opStatus').textContent = isOperator? 'OPERATOR DEVICE' : 'VIEWER DEVICE'; }
   }
 
   (function injectAdminPanels(){
@@ -600,9 +592,7 @@
           <button id="btnSetAsOperator">Set this device as operator</button>
           <button id="btnResetOperator" class="danger">Reset operator (set null)</button>
         </div>
-        <p class="muted" style="margin-top:6px">
-          Only the current operator device can reset. After reset, the next signed-in device can claim operator.
-        </p>
+        <p class="muted" style="margin-top:6px">Only the current operator device can reset. After reset, the next signed-in device can claim operator.</p>
       </section>
       <section class="card" id="rekeyCard">
         <h2>REKEY OFFICERS (BREAK-GLASS)</h2>
@@ -619,9 +609,7 @@
       </section>`;
     p.insertAdjacentHTML('afterbegin', html);
 
-    $('#btnCopyUid')?.addEventListener('click', async ()=>{
-      await navigator.clipboard.writeText(myUid||''); alert('UID copied');
-    });
+    $('#btnCopyUid')?.addEventListener('click', async ()=>{ await navigator.clipboard.writeText(myUid||''); alert('UID copied'); });
 
     $('#btnSetAsOperator')?.addEventListener('click', async ()=>{
       if(!myUid) return alert('No UID yet. Try again in a second.');
@@ -630,11 +618,8 @@
         const cur = curSnap.exists()? curSnap.val() : null;
         if(cur && cur!==myUid){ alert('Operator already set to another device.'); return; }
         await writeCfg({ operatorUid: myUid });
-        operatorUid=myUid;
-        await appendLog('Operator UID set to current device.');
-        setControlState();
-        alert('This device registered as OPERATOR.');
-      }catch(e){ console.error(e); alert('Failed to set operator UID. Check rules/connection.'); }
+        operatorUid=myUid; await appendLog('Operator UID set to current device.'); setControlState(); alert('This device registered as OPERATOR.');
+      }catch(e){ console.error(e); await appendLog('ERROR: failed to set operator UID'); alert('Failed to set operator UID.'); }
     });
 
     $('#btnResetOperator')?.addEventListener('click', async ()=>{
@@ -642,21 +627,15 @@
         if(!isOperator) return alert('Only current operator can reset.');
         if(!unlocked) return alert('Unlock CONTROL first.');
         if(!confirm('Reset operator to null? Next device can claim operator.')) return;
-        const pin = prompt('Enter Operator PIN to confirm reset');
-        if(!pin) return;
+        const pin = prompt('Enter Operator PIN to confirm reset'); if(!pin) return;
         if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
         await writeCfg({ operatorUid: null });
-        operatorUid = null;
-        await appendLog('Operator reset to null by current operator.');
-        setControlState();
+        operatorUid = null; await appendLog('Operator reset to null by current operator.'); setControlState();
         alert('Operator reset. Reload on the new device and claim operator.');
-      }catch(e){ console.error(e); alert('Reset failed. Check rules/connection.'); }
+      }catch(e){ console.error(e); await appendLog('ERROR: operator reset failed'); alert('Reset failed.'); }
     });
 
-    $('#btnGenToken')?.addEventListener('click', async ()=>{
-      const t=genTokenHex(64); $('#rkToken').value=t;
-      try{ await navigator.clipboard.writeText(t); alert('Recovery token generated & copied'); }catch{ alert('Token generated. Copy it now.'); }
-    });
+    $('#btnGenToken')?.addEventListener('click', async ()=>{ const t=genTokenHex(64); $('#rkToken').value=t; try{ await navigator.clipboard.writeText(t); alert('Token generated & copied'); }catch{ alert('Token generated. Copy it now.'); } });
     $('#btnSetRecovery')?.addEventListener('click', async ()=>{
       if(!isOperator || !unlocked) return alert('Unlock + operator required');
       const pin=$('#rkPin').value.trim(); const tok=$('#rkToken').value.trim();
@@ -667,7 +646,7 @@
     });
     $('#btnRekey')?.addEventListener('click', async ()=>{
       if(!isOperator || !unlocked) return alert('Unlock + operator required');
-      if(lockoutActive()) return alert('Locked out');
+      if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
       const pin=$('#rkPin').value.trim(); const tok=$('#rkToken').value.trim();
       if(!pin||!tok) return alert('Enter PIN and token');
       if(await sha256(pin)!==state.controlKeyHash){ await fail('rekey'); return alert('Wrong operator PIN'); }
@@ -685,37 +664,23 @@
       const snap = await get(child(securityRef,key));
       const n = (snap.exists()? (snap.val()||0):0)+1;
       await writeSec({ [key]: n });
-      if(n>=5) await enterLockout('Repeated failed attempts');
+      if(n>=5) await enterLockout('REPEATED FAILED ATTEMPTS');
     }catch{}
   }
 
-  function refreshPinUI(){ if(!btnSetPin) return;
-    btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block';
-  }
+  function refreshPinUI(){ if(!btnSetPin) return; btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block'; }
 
-  // FIXED: Set PIN works after reset; auto-claim operator if null; no local assert gate
+  // Set PIN (still auto-claims operator if null)
   btnSetPin?.addEventListener('click', async ()=>{
     try{
       if (!ONLINE) return alert('System offline.');
       if (state.controlKeyHash) return alert('PIN already set.');
       const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
       const hash=await sha256(pin);
-
-      try {
-        const cur = (await get(child(cfgRef,'operatorUid'))).val() ?? null;
-        if (cur === null && myUid) {
-          await update(cfgRef, { operatorUid: myUid });
-          operatorUid = myUid;
-        }
-      } catch (e) { console.warn('[claim operator skipped]', e); }
-
+      try { const cur = (await get(child(cfgRef,'operatorUid'))).val() ?? null; if (cur === null && myUid) { await update(cfgRef, { operatorUid: myUid }); operatorUid = myUid; } } catch (e) { console.warn('[claim operator skipped]', e); }
       await update(root, { controlKeyHash: hash });
-      await appendLog('Operator PIN set.'); speak('Operator PIN set.');
-      refreshPinUI();
-    }catch(e){
-      console.error('Set PIN failed', e);
-      if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied: '+(e.code||e.message||e));
-    }
+      await appendLog('Operator PIN set.'); speak('Operator PIN set.'); refreshPinUI();
+    }catch(e){ console.error('Set PIN failed', e); await appendLog('ERROR: Set PIN denied'); if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied: '+(e.code||e.message||e)); }
   });
 
   btnUnlock?.addEventListener('click', async ()=>{
@@ -723,22 +688,15 @@
     if(!ONLINE) return alert('System offline.');
     const pin=$('#pin').value.trim(); if(!pin) return;
     if(!state.controlKeyHash) return alert('No PIN set yet.');
-    if(await sha256(pin)!==state.controlKeyHash){
-      await fail('unlock'); gateLabel.textContent='ACCESS DENIED'; gateLabel.style.color='#ff9b9b'; return;
-    }
+    if(await sha256(pin)!==state.controlKeyHash){ await fail('unlock'); gateLabel.textContent='ACCESS DENIED'; gateLabel.style.color='#ff9b9b'; return; }
     unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none';
     setControlState(); speak('Access granted.');
     const ua = (navigator.userAgent||'')+'|'+(navigator.platform||''); const uah = await sha256(ua);
-    const last = (await get(child(securityRef,'lastOperatorUAHash'))).val()||'';
-    if(uah!==last){ await writeSec({ lastOperatorUAHash: uah }); await appendLog('SECURITY: New device used to unlock CONTROL'); speak('Security notice. New device.'); }
+    const last = (await get(child(securityRef,'lastOperatorUAHash'))).val()||''; if(uah!==last){ await writeSec({ lastOperatorUAHash: uah }); await appendLog('SECURITY: New device used to unlock CONTROL'); speak('Security notice. New device.'); }
   });
 
   const officersAreLocked = ()=> !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
-  function updateOfficerUI(){
-    if(!officerSetupSection || !officerLockedMsg) return;
-    if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
-    else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; }
-  }
+  function updateOfficerUI(){ if(!officerSetupSection || !officerLockedMsg) return; if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; } else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; } }
 
   btnSaveOfficers?.addEventListener('click', async ()=>{
     if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
@@ -748,11 +706,9 @@
       const n1=$('#setupO1Name').value.trim(); const p1=$('#setupO1Pin').value.trim();
       const n2=$('#setupO2Name').value.trim(); const p2=$('#setupO2Pin').value.trim();
       if(!n1||!p1||!n2||!p2) return alert('Enter both names and pins.');
-      officers = { locked:true, o1:{ name:n1, nameNorm:norm(n1), codeHash: await sha256(p1) },
-                             o2:{ name:n2, nameNorm:norm(n2), codeHash: await sha256(p2) } };
-      await writeCfg({ officers }); updateOfficerUI();
-      await appendLog('Officers set.'); speak('Officer credentials stored.');
-    }catch(e){ if(String(e).includes('NOT_OPERATOR')) await appendLog('SECURITY: Non-operator attempted to modify config'); }
+      officers = { locked:true, o1:{ name:n1, nameNorm:norm(n1), codeHash: await sha256(p1) }, o2:{ name:n2, nameNorm:norm(n2), codeHash: await sha256(p2) } };
+      await writeCfg({ officers }); updateOfficerUI(); await appendLog('Officers set.'); speak('Officer credentials stored.');
+    }catch(e){ await appendLog('ERROR: Save officers denied'); }
   });
 
   btnArm?.addEventListener('click', async ()=>{
@@ -766,7 +722,7 @@
     const ok2 = (n2===officers.o2.nameNorm) && (await sha256(p2)===officers.o2.codeHash);
     const okAlt1 = (n1===officers.o2.nameNorm) && (await sha256(p1)===officers.o2.codeHash);
     const okAlt2 = (n2===officers.o1.nameNorm) && (await sha256(p2)===officers.o1.codeHash);
-    if(!((ok1&&ok2)||(okAlt1&&okAlt2))) { await fail('verify'); return alert('Verification failed.'); }
+    if(!((ok1&&ok2)||(okAlt1&&okAlt2))) { await fail('verify'); await appendLog('ERROR: Officer verification failed'); return alert('Verification failed.'); }
 
     await write({auth1:{at:now()}, auth2:{at:now()}, armedAt:now()});
     await setStatus('ARMED'); await appendLog('Armed by two officers.');
@@ -780,9 +736,12 @@
   btnDisarm?.addEventListener('click', async ()=>{
     if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
-    await write({auth1:null, auth2:null, armedAt:null});
-    await setStatus('IDLE'); await appendLog('Disarmed.'); speak('Auto destruct disarmed.');
-    stopSfx('klaxon'); setControlState();
+    if(state.status!=='ARMED') return alert('Disarm available only when ARMED.');
+    try{
+      await write({auth1:null, auth2:null, armedAt:null});
+      await setStatus('IDLE'); await appendLog('Disarmed.'); speak('Auto destruct disarmed.');
+      stopSfx('klaxon'); setControlState();
+    }catch(e){ await appendLog('ERROR: Disarm failed'); }
   });
 
   btnStart?.addEventListener('click', async ()=>{
@@ -791,10 +750,12 @@
     const m=Math.max(0, parseInt($('#mins').value||'0',10));
     const s=Math.max(0, Math.min(59, parseInt($('#secs').value||'0',10)));
     const durationMs=(m*60+s)*1000; const startAt=now();
-    await write({startAt, durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`);
-    speak(`Set the countdown for ${m} minutes ${s} seconds from my mark. Mark.`);
-    setTimeout(()=> speak(`Sequence initiated. Auto destruct in ${m} minutes ${s} seconds.`), 1300);
-    setControlState(); updateAlarmForState();
+    try{
+      await write({startAt, durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`);
+      speak(`Set the countdown for ${m} minutes ${s} seconds from my mark. Mark.`);
+      setTimeout(()=> speak(`Sequence initiated. Auto destruct in ${m} minutes ${s} seconds.`), 1300);
+      setControlState(); updateAlarmForState();
+    }catch(e){ await appendLog('ERROR: Start failed'); }
   });
 
   btnAbort?.addEventListener('click', async ()=>{
@@ -802,19 +763,26 @@
     if(!ONLINE || !unlocked || state.status!=='COUNTDOWN') return;
     const left = (state.startAt||0)+(state.durationMs||0)-now();
     if(left <= 15000){ await appendLog('Abort rejected — inside T-15s.'); return; }
-    await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); speak('Auto destruct sequence aborted.');
-    stopSfx('klaxon'); setControlState();
+    try{
+      await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); speak('Auto destruct sequence aborted.');
+      stopSfx('klaxon'); setControlState();
+    }catch(e){ await appendLog('ERROR: Abort failed'); }
   });
 
+  // FIXED RESET: only update allowed children; keep logs, no parent set()
   btnReset?.addEventListener('click', async ()=>{
     if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
-    const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null,
-      controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
-    await set(root, newState); await update(cfgRef,{ officers });
-    speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
+    if(!(['ABORTED','DETONATED'].includes(state.status))) return alert('Reset available only after ABORTED/DETONATED.');
+    try{
+      await write({ status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null });
+      await appendLog('Reset to IDLE by operator.');
+      speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
+    }catch(e){ console.error(e); await appendLog('ERROR: Reset failed'); alert('Reset denied. Check rules/connection.'); }
   });
 
+  // ---------- SAFE BOOTSTRAP (no first-run writes to root) ----------
+  const connectedRefHack = ()=>{};
   pauseGuard(render);
 </script>
 </body>
