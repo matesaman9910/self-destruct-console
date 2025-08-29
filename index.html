@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self-Destruct Console — v5 MAX (All Modules)</title>
+<title>LCARS Self-Destruct Console — v5 MAX (All Modules + Live Debug)</title>
 <style>
   :root{
     --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6;
@@ -241,7 +241,7 @@
       </section>
     </div>
 
-    <div class="footer">LCARS single-file · Firebase Realtime DB · Operator-only control · DevTools/tamper guards · SFX/TTS · Brick Mode</div>
+    <div class="footer">LCARS single-file · Firebase Realtime DB · Operator-only control · DevTools/tamper guards · SFX/TTS · Brick Mode · Live Debug</div>
   </main>
 
 <script type="module">
@@ -387,22 +387,24 @@
   let unlocked=false, ONLINE=false, myUid=null, operatorUid=null, isOperator=false;
   let lockoutUntil=0, offlineVoiced=false, rekeyKeyHash='';
   let lastLockReason='', lockoutTimer=null;
+  let DEBUG_MODE=false; // ← live from DB
 
   function disableControls(dis){ [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = dis; }); }
   function lockoutActive(){ return now() < lockoutUntil; }
   function setOnline(ok, msg){
     ONLINE=ok;
     if(ok){
-      if(lockoutActive()){
+      if(lockoutActive() && !DEBUG_MODE){
         showAlarm('TERMINAL LOCKOUT', `Security cooldown`);
         engageBrickMode(); updateLockoutOverlay();
-      } else { hideAlarm(); }
+      } else { hideAlarm(); document.body.classList.remove('brick'); }
       hideBanner(); disableControls(false); offlineVoiced=false;
     } else {
       showAlarm('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', msg||'Firebase unreachable · controls disabled');
       showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true);
       if(!offlineVoiced){ speak('Warning. Self destruct system damaged. Firebase offline.'); offlineVoiced=true; }
     }
+    if(DEBUG_MODE){ showBanner('DEBUG MODE — lockout UI suppressed'); }
     updateAlarmForState(); setControlState();
   }
 
@@ -419,7 +421,7 @@
     document.querySelectorAll('button,input,select,textarea,a').forEach(el=>{ try{ el.disabled=true; el.tabIndex=-1; el.setAttribute('aria-disabled','true'); }catch{} });
   }
   function engageBrickMode(){
-    if(brickApplied) return;
+    if(brickApplied || DEBUG_MODE) return; // suppressed in debug
     brickApplied=true;
     document.body.classList.add('brick');
     neutralizeHandlers();
@@ -427,7 +429,6 @@
     lkReason.style.display='block'; lkRemain.style.display='block'; lkUid.style.display='block';
   }
   function updateLockoutOverlay(){
-    if(!brickApplied) return;
     lkReasonTxt.textContent=lastLockReason||'Security policy';
     lkUidTxt.textContent=myUid||'—';
     lkRemainTxt.textContent=fmt.hhmmss(Math.max(0, lockoutUntil - now()));
@@ -590,6 +591,19 @@
       onValue(ref(db,'selfDestruct/startAt'),snap=>{ state.startAt=snap.val()||null; pauseGuard(render); });
       onValue(ref(db,'selfDestruct/durationMs'), snap=>{ state.durationMs=snap.val()||0; pauseGuard(render); });
 
+      // Live debug toggle
+      onValue(ref(db,'selfDestruct/debug'), snap=>{
+        DEBUG_MODE = !!snap.val();
+        if(DEBUG_MODE){
+          hideAlarm(); document.body.classList.remove('brick');
+          showBanner('DEBUG MODE — lockout UI suppressed');
+        }else{
+          hideBanner();
+          if(lockoutActive()){ showAlarm('TERMINAL LOCKOUT','Security cooldown'); engageBrickMode(); }
+        }
+        setControlState();
+      });
+
       onValue(cfgRef, snap=>{
         const v=snap.val()||{}; officers = v.officers? v.officers : officers;
         operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash;
@@ -604,10 +618,14 @@
 
       onValue(securityRef, snap=>{
         const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0;
-        if(lockoutActive()){
+        if(lockoutActive() && !DEBUG_MODE){
           showAlarm('TERMINAL LOCKOUT', 'Security cooldown active'); engageBrickMode();
           if(lockoutTimer) clearInterval(lockoutTimer); lockoutTimer = setInterval(updateLockoutOverlay, 500);
-        } else { if(lockoutTimer) clearInterval(lockoutTimer); if(ONLINE) hideAlarm(); }
+        } else {
+          if(lockoutTimer) clearInterval(lockoutTimer);
+          if(ONLINE) hideAlarm();
+          document.body.classList.remove('brick');
+        }
         setControlState();
       });
 
@@ -636,7 +654,7 @@
   // ───────────────── DB helpers ─────────────────
   function assertOnline(){
     if(!ONLINE) throw new Error('OFFLINE');
-    if(lockoutActive()) throw new Error('LOCKOUT');
+    if(lockoutActive() && !DEBUG_MODE) throw new Error('LOCKOUT');
     if(!isOperator) throw new Error('NOT_OPERATOR');
   }
   async function write(patch){ assertOnline(); return update(root, patch); }
@@ -645,7 +663,7 @@
   async function appendLog(line){
     try{
       const e=`[${new Date().toLocaleTimeString()}] ${line}`;
-      // Private log (operator only, may fail if not operator)
+      // Private log
       try{
         const pr = await get(child(root,'log'));
         const priv=(pr.exists()? pr.val():[]).slice(-99); priv.push(e);
@@ -663,9 +681,12 @@
     lockoutUntil = now()+5*60*1000;
     lastLockReason=sub||'Security policy';
     try { if (securityRef) await update(securityRef,{ lockoutUntil }); } catch {}
-    showAlarm('TERMINAL LOCKOUT', 'Security cooldown active');
-    speak('Security alert. Terminal lockout engaged.');
-    engageBrickMode(); updateLockoutOverlay();
+    if(!DEBUG_MODE){
+      showAlarm('TERMINAL LOCKOUT', 'Security cooldown active');
+      engageBrickMode(); updateLockoutOverlay();
+    }else{
+      showBanner('DEBUG MODE — lockout UI suppressed');
+    }
     appendLog(`LOCKOUT: ${lastLockReason} (uid ${myUid||'—'})`);
     setControlState();
   }
@@ -675,13 +696,13 @@
     const left = (state.startAt||0)+(state.durationMs||0)-now();
     isOperator = !!(myUid && operatorUid && myUid === operatorUid);
 
-    const opBlock = !isOperator;
-    if(btnArm)   btnArm.disabled   = opBlock || !ONLINE || !unlocked || state.status!=='IDLE';
-    if(btnDisarm)btnDisarm.disabled= opBlock || !ONLINE || !unlocked || state.status!=='ARMED';
-    if(btnStart) btnStart.disabled = opBlock || !ONLINE || !unlocked || state.status!=='ARMED';
-    if(btnAbort) btnAbort.disabled = opBlock || !ONLINE || !unlocked || state.status!=='COUNTDOWN' || left<=15000;
-    if(btnReset) btnReset.disabled = opBlock || !ONLINE || !unlocked || !(['ABORTED','DETONATED'].includes(state.status));
-    if(btnSaveOfficers) btnSaveOfficers.disabled = opBlock || !ONLINE || !unlocked || officersAreLocked();
+    const blocked = (!isOperator) || (!ONLINE) || (!unlocked) || (lockoutActive() && !DEBUG_MODE);
+    if(btnArm)   btnArm.disabled   = blocked || state.status!=='IDLE';
+    if(btnDisarm)btnDisarm.disabled= blocked || state.status!=='ARMED';
+    if(btnStart) btnStart.disabled = blocked || state.status!=='ARMED';
+    if(btnAbort) btnAbort.disabled = blocked || state.status!=='COUNTDOWN' || left<=15000;
+    if(btnReset) btnReset.disabled = blocked || !(['ABORTED','DETONATED'].includes(state.status));
+    if(btnSaveOfficers) btnSaveOfficers.disabled = blocked || officersAreLocked();
 
     if(opCard){
       $('#uidVal').textContent = myUid || '—';
@@ -689,7 +710,9 @@
     }
   }
 
-  function officersAreLocked(){ return !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash); }
+  function officersAreLocked(){
+    return !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
+  }
   function updateOfficerUI(){
     if(!officerSetupSection || !officerLockedMsg) return;
     if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
@@ -742,7 +765,7 @@
   });
   $('#btnRekey')?.addEventListener('click', async ()=>{
     if(!isOperator || !unlocked) return alert('Unlock + operator required');
-    if(lockoutActive()) return alert('Locked out');
+    if(lockoutActive() && !DEBUG_MODE) return alert('Locked out');
     const pin=$('#rkPin').value.trim(); const tok=$('#rkToken').value.trim();
     if(!pin||!tok) return alert('Enter PIN and token');
     if(await sha256(pin)!==state.controlKeyHash){ await fail('rekey'); return alert('Wrong operator PIN'); }
@@ -783,7 +806,7 @@
   });
 
   btnUnlock?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE) return alert('System offline.');
     const pin=$('#pin').value.trim(); if(!pin) return;
     if(!state.controlKeyHash) return alert('No PIN set yet.');
@@ -802,7 +825,6 @@
   });
 
   // ───────────────── Officers ─────────────────
-  const officersAreLocked = ()=> !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
   function updateOfficerUI(){
     if(!officerSetupSection || !officerLockedMsg) return;
     if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
@@ -810,7 +832,7 @@
   }
 
   btnSaveOfficers?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     try{
       assertOnline(); if(!unlocked) return alert('Unlock CONTROL first');
       if(officersAreLocked()) return alert('Officers already set.');
@@ -826,7 +848,7 @@
 
   // ───────────────── Controls ─────────────────
   btnArm?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='IDLE') return;
     if(!officersAreLocked()) return alert('Set officers first.');
     const n1 = norm($('#verifyO1Name').value), p1=$('#verifyO1Pin').value.trim();
@@ -848,7 +870,7 @@
   });
 
   btnDisarm?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
     if(state.status!=='ARMED') return alert('Disarm available only when ARMED.');
     await write({auth1:null, auth2:null, armedAt:null});
@@ -857,7 +879,7 @@
   });
 
   btnStart?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='ARMED') return;
     const m=Math.max(0, parseInt($('#mins').value||'0',10));
     const s=Math.max(0, Math.min(59, parseInt($('#secs').value||'0',10)));
@@ -869,7 +891,7 @@
   });
 
   btnAbort?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='COUNTDOWN') return;
     const left = (state.startAt||0)+(state.durationMs||0)-now();
     if(left <= 15000){ await appendLog('Abort rejected — inside T-15s.'); return; }
@@ -878,7 +900,7 @@
   });
 
   btnReset?.addEventListener('click', async ()=>{
-    if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
+    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked) return;
     if(!(['ABORTED','DETONATED'].includes(state.status))) return alert('Reset after ABORTED/DETONATED only.');
     const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null,
