@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self‑Destruct Console</title>
+<title>LCARS Self-Destruct Console</title>
 <style>
   :root{
     --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6;
@@ -61,7 +61,7 @@
   .gate h3{margin:0 0 6px 0; text-transform:uppercase; letter-spacing:.2em; color:#ff9b9b}
   .denied{color:#ff9b9b; font-weight:900; letter-spacing:.18em; text-transform:uppercase}
 
-  #topBanner{position:fixed; left:0; right:0; top:54px; z-index:25; padding:10px 16px; text-align:center; font-weight:900; letter-spacing:.18em; text-transform:uppercase; border-bottom:2px solid #300; background:#1a0000; color:#ff9b9b; display:none}
+  #topBanner{position:fixed; left:0; right:0; top:0; z-index:25; padding:10px 16px; text-align:center; font-weight:900; letter-spacing:.18em; text-transform:uppercase; border-bottom:2px solid #300; background:#1a0000; color:#ff9b9b; display:none}
   .footer{margin:30px 0 50px; text-align:center; color:#9fb0c9; font-size:12px}
 </style>
 </head>
@@ -69,7 +69,7 @@
   <header>
     <div class="lcars">
       <div class="bar"></div><div class="bar2"></div>
-      <div class="title">LCARS // SELF‑DESTRUCT CONSOLE</div>
+      <div class="title">LCARS // SELF-DESTRUCT CONSOLE</div>
       <div class="tabs">
         <button class="tab active" id="tabCountdown">COUNTDOWN</button>
         <button class="tab" id="tabControl">CONTROL</button>
@@ -101,7 +101,7 @@
     <!-- COUNTDOWN VIEW (public) -->
     <div id="viewCountdown">
       <section class="centerCard">
-        <h2>SELF‑DESTRUCT STATUS</h2>
+        <h2>SELF-DESTRUCT STATUS</h2>
         <div class="statusRow">
           <span class="k">STATE</span>
           <span id="statusPill" class="pill idle">IDLE</span>
@@ -122,10 +122,10 @@
       </section>
     </div>
 
-    <!-- CONTROL VIEW (PIN‑gated) -->
+    <!-- CONTROL VIEW (PIN-gated) -->
     <div id="viewControl">
       <section class="card" id="officerSetupSection">
-        <h2>OFFICERS — ONE‑TIME SETUP</h2>
+        <h2>OFFICERS — ONE-TIME SETUP</h2>
         <div class="two">
           <div><label>Officer 1 Name</label><input id="setupO1Name" placeholder="Name" /></div>
           <div><label>Officer 1 PIN</label><input id="setupO1Pin" type="password" placeholder="••••" /></div>
@@ -174,16 +174,14 @@
       </section>
     </div>
 
-    <div class="footer">LCARS single‑file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
+    <div class="footer">LCARS single-file · Firebase Realtime DB · Control gated by PIN · Countdown public</div>
   </main>
 
 <script type="module">
-  // ───────────────── Firebase SDKs ─────────────────
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
   import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
   import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
-  // ───────────────── Config (yours) ─────────────────
   const firebaseConfig = {
     apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
     authDomain: "self-destruct-console.firebaseapp.com",
@@ -194,7 +192,6 @@
     appId: "1:669939099742:web:310269ae940dd68a84accf"
   };
 
-  // ───────────────── Helpers ─────────────────
   const $ = s => document.querySelector(s);
   const now = () => Date.now();
   const pad2 = n => String(n).padStart(2,'0');
@@ -204,7 +201,6 @@
       return (h>0?pad2(h)+':':'')+pad2(m)+':'+pad2(s); },
     when(ts){ return ts? new Date(ts).toLocaleString(): '–'; }
   };
-  // normalized officer names to match rules /^[a-z0-9 .'_-]+$/
   const norm = s => (s||'')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase()
@@ -212,10 +208,9 @@
     .trim()
     .replace(/\s+/g,' ');
   const qs = new URLSearchParams(location.search);
-  const FORCE_OFFLINE = qs.has('offline');  // ?offline
-  const MAINT = qs.has('maint');            // ?maint (bypass DevTools lockout)
+  const FORCE_OFFLINE = qs.has('offline');
+  const MAINT = qs.has('maint');
 
-  // ───────────────── Overlays ─────────────────
   (function injectStyles(){
     const style = document.createElement('style');
     style.textContent = `
@@ -259,12 +254,11 @@
     banner.textContent='SELF DESTRUCT SYSTEM DAMAGED — OFFLINE';
     document.body.prepend(banner);
   }
-  const showAlarm=(main,sub)=>{ $('#alarmMain').textContent=main||'ALERT'; $('#alarmSub').textContent=sub||''; alarm.style.display='flex'; };
+  const showAlarm=(main,sub)=>{ document.getElementById('alarmMain').textContent=main||'ALERT'; document.getElementById('alarmSub').textContent=sub||''; alarm.style.display='flex'; };
   const hideAlarm=()=>{ alarm.style.display='none'; };
   const showBanner=(txt)=>{ banner.textContent=txt||'ALERT'; banner.style.display='block'; };
   const hideBanner=()=>{ banner.style.display='none'; };
 
-  // ───────────────── Refs ─────────────────
   const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
   const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl');
   const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
@@ -289,7 +283,7 @@
   tabCountdown?.addEventListener('click',()=>show('countdown'));
   tabControl?.addEventListener('click',()=>show('control'));
 
-  // ───────────────── Audio / SFX ─────────────────
+  // Audio / SFX
   let audioEnabled=false, tickEnabled=true, audioCtx=null;
   function ensureSoundControls(){
     if(document.getElementById('btnToggleSound')) return;
@@ -321,7 +315,6 @@
     o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d);
   }
 
-  // Optional file SFX (auto-used if files exist)
   const SFX = {
     uiBeep: new Audio('assets/audio/ui-beep.mp3'),
     uiConfirm: new Audio('assets/audio/ui-confirm.mp3'),
@@ -329,8 +322,7 @@
     offline: new Audio('assets/audio/offline-klaxon.mp3')
   };
   SFX.klaxon.loop = true; SFX.offline.loop = true;
-  function playSfx(name){ if(!audioEnabled) return;
-    const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
+  function playSfx(name){ if(!audioEnabled) return; const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
   function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
 
   let alarmKind=null;
@@ -348,7 +340,6 @@
     if(target!==alarmKind){ startKlaxon(target); alarmKind=target; }
   }
 
-  // ───────────────── App state ─────────────────
   let state = {
     status:'IDLE', since:now(), auth1:null, auth2:null,
     startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`],
@@ -375,7 +366,6 @@
     updateAlarmForState(); setControlState();
   }
 
-  // ───────────────── Render (guard-paused) ─────────────────
   let guardPaused = 0;
   const pauseGuard = fn => { guardPaused++; try { return fn(); } finally { guardPaused--; } };
 
@@ -406,7 +396,6 @@
     updateAlarmForState();
   }
 
-  // ───────────────── Tamper guard (characterData, 3 strikes/5s) ─────────────────
   const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
   const protectedSet = new Set(protectedNodes);
   let tamperStrikes = 0, tamperTimer = null, mo;
@@ -428,7 +417,6 @@
     protectedNodes.forEach(n=> mo.observe(n,{ characterData:true, subtree:true, childList:false, attributes:false }));
   }
 
-  // ───────────────── DevTools lockout (2 strikes/5s; bypass ?maint=1) ─────────────────
   let dtStrikes=0, dtTimer=null;
   const devtoolsLikelyOpen=()=>{ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T); };
   function checkDevtools(){ if(MAINT) return; if(devtoolsLikelyOpen()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) enterLockout('DEVELOPER TOOLS OPENED'); } }
@@ -436,7 +424,6 @@
   window.addEventListener('resize',checkDevtools);
   window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools(); });
 
-  // ───────────────── Timer + voice 5..1 ─────────────────
   let lastSpokenSec=null;
   setInterval(()=>{
     if(state.status!=='COUNTDOWN') return;
@@ -454,7 +441,6 @@
     setControlState();
   }, 200);
 
-  // ───────────────── Crypto ─────────────────
   async function sha256(str){
     const enc=new TextEncoder().encode(str);
     const buf=await crypto.subtle.digest('SHA-256', enc);
@@ -465,7 +451,6 @@
     return [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
   }
 
-  // ───────────────── Config validation ─────────────────
   function validateConfig(){
     const cfg=firebaseConfig;
     if(!cfg.apiKey||!cfg.authDomain||!cfg.databaseURL||!cfg.projectId||!cfg.appId) return 'CONFIG MISSING — OFFLINE';
@@ -475,7 +460,6 @@
   }
   const withTimeout = (p,ms=6000)=> Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
 
-  // ───────────────── Firebase boot + auth ─────────────────
   let app, db, root, cfgRef, securityRef, auth;
   (async function init(){
     const cfgErr = validateConfig();
@@ -496,7 +480,7 @@
         showBanner('AUTH ERROR — OFFLINE');
         disableControls(true);
         console.error('[Auth error]', err);
-        return; // abort init early
+        return;
       }
 
       onAuthStateChanged(auth, async (user)=>{
@@ -512,15 +496,26 @@
 
       let firstRootSnap = true;
 
-      const s = await withTimeout(get(root), 6000);
-      if(!s.exists()) await set(root, state); else state = { ...state, ...s.val() };
+      // SAFE BOOTSTRAP — read only; do not create root; only minimal config keys if missing
+      try {
+        const s = await withTimeout(get(root), 6000);
+        if (s.exists()) state = { ...state, ...s.val() };
+      } catch (e) {
+        console.warn('[root read skipped]', e);
+      }
 
-      const c = await withTimeout(get(cfgRef), 6000);
-      if(c.exists()){
-        const v=c.val()||{}; officers = v.officers || officers;
-        operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || '';
-      } else {
-        await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' });
+      try {
+        const c = await withTimeout(get(cfgRef), 6000);
+        if (c.exists()) {
+          const v = c.val() || {};
+          officers     = v.officers || officers;
+          operatorUid  = v.operatorUid ?? null;
+          rekeyKeyHash = v.rekeyKeyHash || '';
+        } else {
+          await update(cfgRef, { operatorUid: null, rekeyKeyHash: '' });
+        }
+      } catch (e) {
+        console.warn('[config bootstrap skipped]', e);
       }
 
       onValue(root, snap=>{
@@ -550,14 +545,12 @@
     }
   })();
 
-  // ───────────────── DB helpers ─────────────────
   function assertOnline(){
     if(!ONLINE) throw new Error('OFFLINE');
     if(lockoutActive()) throw new Error('LOCKOUT');
     if(!isOperator) throw new Error('NOT_OPERATOR');
   }
   async function write(patch){ assertOnline(); return update(root, patch); }
-  // writeCfg: used for provisioning operatorUid and normal operator writes
   async function writeCfg(patch){ return update(cfgRef, patch); }
   async function writeSec(patch){ try{ return update(securityRef, patch); }catch{} }
   async function appendLog(line){
@@ -576,7 +569,6 @@
     setControlState();
   }
 
-  // ───────────────── Operator gate & UI ─────────────────
   function setControlState(){
     const left = (state.startAt||0)+(state.durationMs||0)-now();
     isOperator = !!(myUid && operatorUid && myUid === operatorUid);
@@ -631,7 +623,6 @@
       await navigator.clipboard.writeText(myUid||''); alert('UID copied');
     });
 
-    // Provisioning: allow first set if operatorUid is null/missing; else only same operator can change.
     $('#btnSetAsOperator')?.addEventListener('click', async ()=>{
       if(!myUid) return alert('No UID yet. Try again in a second.');
       try{
@@ -646,7 +637,6 @@
       }catch(e){ console.error(e); alert('Failed to set operator UID. Check rules/connection.'); }
     });
 
-    // Reset operator to null (requires operator device + unlocked + PIN)
     $('#btnResetOperator')?.addEventListener('click', async ()=>{
       try{
         if(!isOperator) return alert('Only current operator can reset.');
@@ -663,7 +653,6 @@
       }catch(e){ console.error(e); alert('Reset failed. Check rules/connection.'); }
     });
 
-    // Recovery token tools
     $('#btnGenToken')?.addEventListener('click', async ()=>{
       const t=genTokenHex(64); $('#rkToken').value=t;
       try{ await navigator.clipboard.writeText(t); alert('Recovery token generated & copied'); }catch{ alert('Token generated. Copy it now.'); }
@@ -690,7 +679,6 @@
     });
   })();
 
-  // ───────────────── Failure rate-limit ─────────────────
   async function fail(kind){
     try{
       const key = `fail_${kind}_${Math.floor(now()/60000)}`;
@@ -701,19 +689,33 @@
     }catch{}
   }
 
-  // ───────────────── PIN ─────────────────
   function refreshPinUI(){ if(!btnSetPin) return;
     btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block';
   }
+
+  // FIXED: Set PIN works after reset; auto-claim operator if null; no local assert gate
   btnSetPin?.addEventListener('click', async ()=>{
     try{
-      assertOnline();
-      if(state.controlKeyHash) return alert('PIN already set.');
+      if (!ONLINE) return alert('System offline.');
+      if (state.controlKeyHash) return alert('PIN already set.');
       const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
-      const hash=await sha256(pin); await write({ controlKeyHash: hash });
+      const hash=await sha256(pin);
+
+      try {
+        const cur = (await get(child(cfgRef,'operatorUid'))).val() ?? null;
+        if (cur === null && myUid) {
+          await update(cfgRef, { operatorUid: myUid });
+          operatorUid = myUid;
+        }
+      } catch (e) { console.warn('[claim operator skipped]', e); }
+
+      await update(root, { controlKeyHash: hash });
       await appendLog('Operator PIN set.'); speak('Operator PIN set.');
       refreshPinUI();
-    }catch(e){ if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied'); }
+    }catch(e){
+      console.error('Set PIN failed', e);
+      if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied: '+(e.code||e.message||e));
+    }
   });
 
   btnUnlock?.addEventListener('click', async ()=>{
@@ -726,13 +728,11 @@
     }
     unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none';
     setControlState(); speak('Access granted.');
-    // new device notice
     const ua = (navigator.userAgent||'')+'|'+(navigator.platform||''); const uah = await sha256(ua);
     const last = (await get(child(securityRef,'lastOperatorUAHash'))).val()||'';
     if(uah!==last){ await writeSec({ lastOperatorUAHash: uah }); await appendLog('SECURITY: New device used to unlock CONTROL'); speak('Security notice. New device.'); }
   });
 
-  // ───────────────── Officers ─────────────────
   const officersAreLocked = ()=> !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash);
   function updateOfficerUI(){
     if(!officerSetupSection || !officerLockedMsg) return;
@@ -755,7 +755,6 @@
     }catch(e){ if(String(e).includes('NOT_OPERATOR')) await appendLog('SECURITY: Non-operator attempted to modify config'); }
   });
 
-  // ───────────────── Controls ─────────────────
   btnArm?.addEventListener('click', async ()=>{
     if(lockoutActive()) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
     if(!ONLINE || !unlocked || state.status!=='IDLE') return;
@@ -816,6 +815,7 @@
     speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
   });
 
-  // ───────────────── Boot render + start guard after first data ─────────────────
   pauseGuard(render);
 </script>
+</body>
+</html>
