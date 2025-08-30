@@ -1,928 +1,499 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self-Destruct Console — v5.1.4 MAX (Hotfix)</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LCARS Self-Destruct Console v5.2</title>
 <style>
-  :root{
-    --bg:#070709; --text:#f3f6fb; --muted:#a8b3c6;
-    --lcars-amber:#ffb400; --lcars-red:#ff3b3b; --line:#20242d;
-    --ok:#2be4a1; --warn:#ffb400; --alert:#ff3b3b;
-  }
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--text); font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
-  header{position:sticky; top:0; z-index:20; padding:10px 14px; background:linear-gradient(180deg,#0f1117,#0a0c10); border-bottom:2px solid var(--line)}
-  .lcars{display:flex; align-items:center; gap:14px}
-  .lcars .bar{height:24px; width:160px; border-radius:12px 0 0 12px; background:var(--lcars-amber)}
-  .lcars .bar2{height:24px; width:110px; border-radius:0 12px 12px 0; background:var(--lcars-red)}
-  .title{letter-spacing:.28em; text-transform:uppercase; font-weight:900}
-  .tabs{margin-left:auto; display:flex; gap:8px}
-  .tab{cursor:pointer; padding:12px 16px; border:2px solid var(--line); background:#131722; border-radius:999px; color:#dde7ff; font-weight:800; letter-spacing:.08em}
-  .tab.active{background:linear-gradient(90deg,#2a0000,#460000); color:#fff; border-color:#a22}
+:root{
+  --bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;
+  --lcars-amber:#ffb400;--lcars-red:#ff3b3b;
+  --ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+header{position:sticky;top:0;z-index:20;padding:10px 14px;background:linear-gradient(180deg,#0e1118,#0a0c11);border-bottom:2px solid var(--line)}
+.lcars{display:flex;align-items:center;gap:14px}
+.lcars .bar{height:24px;width:160px;border-radius:12px 0 0 12px;background:var(--lcars-amber)}
+.lcars .bar2{height:24px;width:110px;border-radius:0 12px 12px 0;background:var(--lcars-red)}
+.title{letter-spacing:.28em;text-transform:uppercase;font-weight:900}
+.tabs{margin-left:auto;display:flex;gap:8px}
+.tab{cursor:pointer;padding:12px 16px;border:2px solid var(--line);background:#131722;border-radius:999px;color:#dde7ff;font-weight:800;letter-spacing:.08em}
+.tab.active{background:linear-gradient(90deg,#2a0000,#4a0000);border-color:#a22;color:#fff}
+main{max-width:1200px;margin:0 auto;padding:22px}
 
-  main{max-width:1200px; margin:0 auto; padding:22px}
+/* COUNTDOWN view */
+#viewCountdown{display:grid;grid-template-columns:1fr;gap:18px}
+.centerCard{background:linear-gradient(180deg,#161b28,#111621);border:1px solid #202c3d;border-radius:18px;padding:22px;display:flex;flex-direction:column;align-items:center;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.centerCard h2{margin:0 0 12px;letter-spacing:.12em;text-transform:uppercase}
+.statusRow{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pill{padding:6px 14px;border-radius:999px;font-weight:900;letter-spacing:.1em}
+.idle{background:#0b241a;color:var(--ok);border:1px solid #1b5c44}
+.armed{background:#241f0b;color:var(--warn);border:1px solid #6b560d}
+.countdown{background:#2a0b0b;color:var(--alert);border:1px solid #6b2323}
+.aborted{background:#1e1e1e;color:#cfcfcf;border:1px solid #3a3a3a}
+.detonated{background:#360909;color:#ff9b9b;border:1px solid #833}
+.k{color:#9fb0c9;text-transform:uppercase;letter-spacing:.12em;font-size:13px}
+.timer{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:14px}
+.big{font-variant-numeric:tabular-nums;font-size:96px;line-height:1;letter-spacing:.04em}
+.sub{color:#9fb0c9;font-size:14px}
+.bar{height:18px;background:#101827;border:1px solid #1f2d44;border-radius:999px;overflow:hidden;width:min(900px,92vw);margin-top:12px}
+.bar>div{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--warn),var(--alert));transition:width .2s linear}
+.log{font-family:ui-monospace,Menlo,Consolas,monospace;background:#0b0f18;border:1px solid #1b2740;border-radius:14px;padding:12px;height:220px;overflow:auto}
+.flash{animation:flash .8s steps(4) infinite}
+@keyframes flash{50%{opacity:.35}}
 
-  /* COUNTDOWN view — big & centered */
-  #viewCountdown{display:grid; grid-template-columns:1fr; gap:18px}
-  .centerCard{background:linear-gradient(180deg,#161b28,#111621); border:1px solid #202c3d; border-radius:18px; padding:22px; display:flex; flex-direction:column; align-items:center; text-align:center; box-shadow:0 10px 30px rgba(0,0,0,.35)}
-  .centerCard h2{margin:0 0 12px 0; letter-spacing:.12em; text-transform:uppercase}
-  .statusRow{display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap}
-  .pill{padding:6px 14px; border-radius:999px; font-weight:900; letter-spacing:.1em}
-  .idle{background:#0b241a; color:var(--ok); border:1px solid #1b5c44}
-  .armed{background:#241f0b; color:var(--warn); border:1px solid #6b560d}
-  .countdown{background:#2a0b0b; color:var(--alert); border:1px solid #6b2323}
-  .aborted{background:#1e1e1e; color:#c0c0c0; border:1px solid #3a3a3a}
-  .detonated{background:#380b0b; color:#ff8080; border:1px solid #833}
-  .k{color:#9fb0c9; text-transform:uppercase; letter-spacing:.12em; font-size:13px}
-  .timer{display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:14px}
-  .big{font-variant-numeric:tabular-nums; font-size:96px; line-height:1; letter-spacing:.04em}
-  .sub{color:#9fb0c9; font-size:14px}
-  .bar{height:18px; background:#101827; border:1px solid #1f2d44; border-radius:999px; overflow:hidden; width:min(900px,92vw); margin-top:12px}
-  .bar>div{height:100%; width:0%; background:linear-gradient(90deg,var(--ok),var(--warn),var(--alert)); transition:width .2s linear}
-  .log{font-family:ui-monospace,Menlo,Consolas,monospace; background:#0b0f18; border:1px solid #1b2740; border-radius:14px; padding:12px; height:220px; overflow:auto}
-  .flash{animation:flash .8s steps(4) infinite}
-  @keyframes flash{50%{opacity:.35}}
+/* CONTROL view */
+#viewControl{display:none;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:linear-gradient(180deg,#161b28,#111621);border:1px solid #202c3d;border-radius:18px;padding:18px}
+.card h2{margin:0 0 12px;letter-spacing:.12em;text-transform:uppercase}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input{background:#0f1421;border:1px solid #203049;color:#eaf2ff;padding:12px;border-radius:12px;width:100%}
+label{display:block;font-size:12px;color:#9fb0c9;margin-bottom:6px}
+button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #2a3b56;background:#0f1623;color:#e6eefb;font-weight:800}
+button.primary{border-color:#21d39e}
+button.warn{border-color:#ffb400}
+button.danger{border-color:#ff3b3b}
+.footer{margin:28px 0 50px;text-align:center;color:#9fb0c9;font-size:12px}
 
-  /* CONTROL view */
-  #viewControl{display:none; grid-template-columns:1fr 1fr; gap:18px}
-  .card{background:linear-gradient(180deg,#161b28,#111621); border:1px solid #202c3d; border-radius:18px; padding:18px}
-  .card h2{margin:0 0 12px 0; letter-spacing:.12em; text-transform:uppercase}
-  .two{display:grid; grid-template-columns:1fr 1fr; gap:12px}
-  input{background:#0f1421; border:1px solid #203049; color:#eaf2ff; padding:12px; border-radius:12px; width:100%}
-  label{display:block; font-size:12px; color:#9fb0c9; margin-bottom:6px}
-  button{cursor:pointer; padding:12px 14px; border-radius:12px; border:1px solid #2a3b56; background:#0f1623; color:#e6eefb; font-weight:800}
-  button.primary{border-color:#21d39e}
-  button.warn{border-color:#ffb400}
-  button.danger{border-color:#ff3b3b}
+/* access gate */
+.overlay{position:fixed;inset:0;background:radial-gradient(1000px 600px at 40% -10%,rgba(255,59,59,.12),transparent), rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
+.gate{width:min(520px,92vw);background:#0b0f14;border:2px solid #330;border-radius:16px;padding:18px}
+.gate h3{margin:0 0 6px;text-transform:uppercase;letter-spacing:.2em;color:#ff9b9b}
+.denied{color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
 
-  .overlay{position:fixed; inset:0; background:radial-gradient(1000px 600px at 40% -10%,rgba(255,59,59,.12),transparent), rgba(0,0,0,.9); display:none; align-items:center; justify-content:center; z-index:30}
-  .gate{width:min(520px,92vw); background:#0b0f14; border:2px solid #330; border-radius:16px; padding:18px}
-  .gate h3{margin:0 0 6px 0; text-transform:uppercase; letter-spacing:.2em; color:#ff9b9b}
-  .denied{color:#ff9b9b; font-weight:900; letter-spacing:.18em; text-transform:uppercase}
-
-  #topBanner{position:fixed; left:0; right:0; top:0; z-index:25; padding:10px 16px; text-align:center; font-weight:900; letter-spacing:.18em; text-transform:uppercase; border-bottom:2px solid #300; background:#1a0000; color:#ff9b9b; display:none}
-  .footer{margin:30px 0 60px; text-align:center; color:#9fb0c9; font-size:12px}
-
-  /* Global alarm / lockout */
-  #globalAlert{position:fixed;inset:0;display:none;z-index:10000;
-    background:
-      radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),
-      radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
-      repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),
-      rgba(10,0,0,.92);backdrop-filter:blur(2px);
-    align-items:center;justify-content:center}
-  #globalAlert .msg{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial;
-    text-transform:uppercase;letter-spacing:.18em;text-align:center;font-weight:900;line-height:1.1;
-    font-size:clamp(32px,7vw,120px);color:#ff6b6b;
-    text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);
-    animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
-  #globalAlert .sub{margin-top:12px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3;opacity:.9;letter-spacing:.14em}
-  .k{color:#ffc7c7}
-  @keyframes alarmPulse{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
-  @keyframes alarmGlow{0%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}
-    50%{text-shadow:0 0 12px #ff3f3f,0 0 24px #ff3f3f,0 0 48px #ff3f3f,0 0 80px rgba(255,0,0,.6)}
-    100%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}}
-
-  /* BRICK MODE — keep overlay + banner only; source remains loaded */
-  body.brick *:not(#globalAlert):not(#topBanner):not(style):not(link):not(script){
-    display:none !important;
-  }
-  body.brick{pointer-events:none;user-select:none}
+/* alerts */
+#globalAlert{position:fixed;inset:0;display:none;z-index:10000;
+  background:
+  radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),
+  radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
+  repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),
+  rgba(10,0,0,.92);backdrop-filter:blur(2px);
+  align-items:center;justify-content:center}
+#globalAlert .msg{font-family:inherit;text-transform:uppercase;letter-spacing:.18em;text-align:center;font-weight:900;line-height:1.1;
+  font-size:clamp(32px,7vw,120px);color:#ff6b6b;
+  text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);
+  animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
+#globalAlert .sub{margin-top:14px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3;opacity:.9;letter-spacing:.14em}
+@keyframes alarmPulse{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
+@keyframes alarmGlow{0%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}
+50%{text-shadow:0 0 12px #ff3f3f,0 0 24px #ff3f3f,0 0 48px #ff3f3f,0 0 80px rgba(255,0,0,.6)}
+100%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}}
+#topBanner{position:fixed;left:0;right:0;top:54px;z-index:25;padding:10px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
+#cornerToasts{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#220;border:1px solid #933;color:#fbb;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 </style>
 </head>
 <body>
-  <header>
-    <div class="lcars">
-      <div class="bar"></div><div class="bar2"></div>
-      <div class="title">LCARS // SELF-DESTRUCT CONSOLE</div>
-      <div class="tabs">
-        <button class="tab active" id="tabCountdown">COUNTDOWN</button>
-        <button class="tab" id="tabControl">CONTROL</button>
-      </div>
+<header>
+  <div class="lcars">
+    <div class="bar"></div><div class="bar2"></div>
+    <div class="title">LCARS // SELF-DESTRUCT CONSOLE</div>
+    <div class="tabs">
+      <button class="tab active" id="tabCountdown">COUNTDOWN</button>
+      <button class="tab" id="tabControl">CONTROL</button>
     </div>
-  </header>
+  </div>
+</header>
 
-  <div id="topBanner">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</div>
+<div id="topBanner">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</div>
+<div id="globalAlert"><div class="msg"><span id="alarmMain">ALERT</span><div id="alarmSub" class="sub"></div></div></div>
+<div id="cornerToasts"></div>
 
-  <!-- CONTROL pin gate (only when opening CONTROL) -->
-  <div id="gateOverlay" class="overlay">
-    <div class="gate">
-      <h3>ACCESS CONTROL</h3>
-      <div class="denied" id="gateLabel">ACCESS DENIED</div>
-      <div class="two" style="margin-top:6px">
-        <div>
-          <label for="pin">Operator PIN</label>
-          <input id="pin" type="password" placeholder="Enter PIN" autocomplete="current-password" />
-        </div>
-        <div style="display:flex; gap:8px; align-items:end">
-          <button id="btnUnlock" class="primary">Unlock</button>
-          <button id="btnSetPin">Set PIN</button>
-        </div>
+<!-- CONTROL gate -->
+<div id="gateOverlay" class="overlay">
+  <div class="gate">
+    <h3>ACCESS CONTROL</h3>
+    <div class="denied" id="gateLabel">ACCESS DENIED</div>
+    <div class="two" style="margin-top:6px">
+      <div>
+        <label for="pin">Operator PIN</label>
+        <input id="pin" type="password" placeholder="Enter PIN" autocomplete="current-password"/>
+      </div>
+      <div style="display:flex;gap:8px;align-items:end">
+        <button id="btnUnlock" class="primary">Unlock</button>
+        <button id="btnSetPin">Set PIN</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- GLOBAL ALARM / LOCKOUT -->
-  <div id="globalAlert">
-    <div class="msg">
-      <div id="alarmMain">SELF DESTRUCT SYSTEM DAMAGED — OFFLINE</div>
-      <div id="alarmSub" class="sub">Firebase unreachable · controls disabled</div>
-      <div id="lkReason" class="sub" style="display:none"><span class="k">Reason:</span> <span id="lkReasonTxt"></span></div>
-      <div id="lkRemain" class="sub" style="display:none"><span class="k">Remaining:</span> <span id="lkRemainTxt"></span></div>
-      <div id="lkUid" class="sub" style="display:none"><span class="k">Device UID:</span> <span id="lkUidTxt"></span></div>
-    </div>
+<main>
+  <!-- COUNTDOWN VIEW -->
+  <div id="viewCountdown">
+    <section class="centerCard">
+      <h2>SELF-DESTRUCT STATUS</h2>
+      <div class="statusRow">
+        <span class="k">STATE</span><span id="statusPill" class="pill idle">IDLE</span>
+        <span class="k">SINCE</span><span id="since">–</span>
+      </div>
+      <div class="timer">
+        <div class="k">TIME REMAINING</div>
+        <div id="timeLeft" class="big">00:00</div>
+        <div class="bar"><div id="barFill"></div></div>
+        <div class="sub" id="countdownInfo">—</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:12px;justify-content:center;align-items:center">
+        <button id="btnToggleSound">Enable Sound</button>
+        <label style="font-size:12px;color:#9fb0c9"><input id="chkTick" type="checkbox" checked> tick each second</label>
+      </div>
+    </section>
+
+    <section class="card" style="max-width:min(980px,92vw);margin:0 auto">
+      <h2>EVENT LOG</h2>
+      <div id="log" class="log"></div>
+    </section>
   </div>
 
-  <main>
-    <!-- COUNTDOWN VIEW (public) -->
-    <div id="viewCountdown">
-      <section class="centerCard">
-        <h2>SELF-DESTRUCT STATUS</h2>
-        <div class="statusRow">
-          <span class="k">STATE</span>
-          <span id="statusPill" class="pill idle">IDLE</span>
-          <span class="k">SINCE</span>
-          <span id="since">–</span>
-        </div>
-        <div class="timer">
-          <div class="k">TIME REMAINING</div>
-          <div id="timeLeft" class="big">00:00</div>
-          <div class="bar"><div id="barFill"></div></div>
-          <div class="sub" id="countdownInfo">—</div>
-        </div>
-      </section>
+  <!-- CONTROL VIEW -->
+  <div id="viewControl">
+    <section class="card" id="operatorCard">
+      <h2>OPERATOR DEVICE</h2>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div><span class="k">UID</span> <code id="uidVal">—</code></div>
+        <div class="pill" style="padding:4px 10px" id="opStatus">VIEWER DEVICE</div>
+        <button id="btnCopyUid">Copy UID</button>
+        <button id="btnSetAsOperator">Set this device as operator</button>
+        <button id="btnResetOperator" class="danger">Reset operator (set null)</button>
+      </div>
+      <p class="muted" style="margin-top:6px;color:#9fb0c9">Only the current operator device can reset. After reset, the next signed-in device can claim operator.</p>
+    </section>
 
-      <section class="card" style="max-width:min(980px,92vw); margin:0 auto">
-        <h2>EVENT LOG</h2>
-        <div id="log" class="log"></div>
-      </section>
-    </div>
+    <section class="card" id="rekeyCard">
+      <h2>REKEY OFFICERS (BREAK-GLASS)</h2>
+      <div class="two">
+        <div><label>Operator PIN</label><input id="rkPin" type="password" placeholder="••••"/></div>
+        <div><label>Recovery Token</label><input id="rkToken" type="password" placeholder="Paste long token"/></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button id="btnGenToken">Generate token</button>
+        <button id="btnSetRecovery" class="warn">Set / Rotate Recovery Token</button>
+        <button id="btnRekey" class="danger">Rekey Officers</button>
+      </div>
+      <p class="muted" style="margin-top:6px;color:#9fb0c9">Token is single-use; only the hash is stored.</p>
+    </section>
 
-    <!-- CONTROL VIEW (PIN-gated) -->
-    <div id="viewControl">
+    <section class="card" id="officerSetupSection">
+      <h2>OFFICERS — ONE-TIME SETUP</h2>
+      <div class="two">
+        <div><label>Officer 1 Name</label><input id="setupO1Name" placeholder="Name"/></div>
+        <div><label>Officer 1 PIN</label><input id="setupO1Pin" type="password" placeholder="••••"/></div>
+      </div>
+      <div class="two" style="margin-top:8px">
+        <div><label>Officer 2 Name</label><input id="setupO2Name" placeholder="Name"/></div>
+        <div><label>Officer 2 PIN</label><input id="setupO2Pin" type="password" placeholder="••••"/></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="btnSaveOfficers" class="warn">Save Officers</button>
+      </div>
+    </section>
 
-      <!-- Operator admin -->
-      <section class="card" id="operatorCard">
-        <h2>OPERATOR DEVICE</h2>
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-          <div><span class="k">UID</span> <code id="uidVal">—</code></div>
-          <div class="pill" style="padding:4px 10px" id="opStatus">VIEWER DEVICE</div>
-          <button id="btnCopyUid">Copy UID</button>
-          <button id="btnSetAsOperator">Set this device as operator</button>
-          <button id="btnResetOperator" class="danger">Reset operator (set null)</button>
-        </div>
-        <p class="muted" style="margin-top:6px">
-          Only the current operator device can reset. After reset, the next signed-in device can claim operator.
-        </p>
-      </section>
+    <section class="card" id="officerLockedMsg" style="display:none">
+      <h2>OFFICERS</h2><p>SET & LOCKED</p>
+    </section>
 
-      <!-- Break-glass rekey -->
-      <section class="card" id="rekeyCard">
-        <h2>REKEY OFFICERS (BREAK-GLASS)</h2>
-        <div class="two">
-          <div><label>Operator PIN</label><input id="rkPin" type="password" placeholder="••••" /></div>
-          <div><label>Recovery Token</label><input id="rkToken" type="password" placeholder="Paste long token" /></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button id="btnGenToken">Generate token</button>
-          <button id="btnSetRecovery" class="warn">Set / Rotate Recovery Token</button>
-          <button id="btnRekey" class="danger">Rekey Officers</button>
-        </div>
-        <p class="muted" style="margin-top:6px">Token is single-use; only the hash is stored.</p>
-      </section>
+    <section class="card">
+      <h2>ARMING — VERIFY</h2>
+      <div class="two">
+        <div><label>Officer 1 Name</label><input id="verifyO1Name" placeholder="Enter O1 name"/></div>
+        <div><label>Officer 1 PIN</label><input id="verifyO1Pin" type="password" placeholder="••••"/></div>
+      </div>
+      <div class="two" style="margin-top:8px">
+        <div><label>Officer 2 Name</label><input id="verifyO2Name" placeholder="Enter O2 name"/></div>
+        <div><label>Officer 2 PIN</label><input id="verifyO2Pin" type="password" placeholder="••••"/></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="btnArm" class="warn">Arm</button>
+        <button id="btnDisarm">Disarm</button>
+      </div>
+    </section>
 
-      <!-- Officer setup (one-time) -->
-      <section class="card" id="officerSetupSection">
-        <h2>OFFICERS — ONE-TIME SETUP</h2>
-        <div class="two">
-          <div><label>Officer 1 Name</label><input id="setupO1Name" placeholder="Name" /></div>
-          <div><label>Officer 1 PIN</label><input id="setupO1Pin" type="password" placeholder="••••" /></div>
-        </div>
-        <div class="two" style="margin-top:8px">
-          <div><label>Officer 2 Name</label><input id="setupO2Name" placeholder="Name" /></div>
-          <div><label>Officer 2 PIN</label><input id="setupO2Pin" type="password" placeholder="••••" /></div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:12px">
-          <button id="btnSaveOfficers" class="warn">Save Officers</button>
-        </div>
-      </section>
+    <section class="card">
+      <h2>COUNTDOWN</h2>
+      <div class="two">
+        <div><label>Minutes</label><input id="mins" type="number" min="0" value="10"/></div>
+        <div><label>Seconds</label><input id="secs" type="number" min="0" max="59" value="0"/></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="btnStart" class="primary">Start (MARK)</button>
+        <button id="btnAbort" class="danger">Abort</button>
+        <button id="btnReset">Reset</button>
+      </div>
+    </section>
+  </div>
 
-      <section class="card" id="officerLockedMsg" style="display:none">
-        <h2>OFFICERS</h2>
-        <p>SET & LOCKED</p>
-      </section>
-
-      <!-- Two-officer verify -->
-      <section class="card">
-        <h2>ARMING — VERIFY</h2>
-        <div class="two">
-          <div><label>Officer 1 Name</label><input id="verifyO1Name" placeholder="Enter O1 name" /></div>
-          <div><label>Officer 1 PIN</label><input id="verifyO1Pin" type="password" placeholder="••••" /></div>
-        </div>
-        <div class="two" style="margin-top:8px">
-          <div><label>Officer 2 Name</label><input id="verifyO2Name" placeholder="Enter O2 name" /></div>
-          <div><label>Officer 2 PIN</label><input id="verifyO2Pin" type="password" placeholder="••••" /></div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:10px">
-          <button id="btnArm" class="warn">Arm</button>
-          <button id="btnDisarm">Disarm</button>
-        </div>
-      </section>
-
-      <!-- Countdown controls -->
-      <section class="card">
-        <h2>COUNTDOWN</h2>
-        <div class="two">
-          <div><label>Minutes</label><input id="mins" type="number" min="0" value="10"></div>
-          <div><label>Seconds</label><input id="secs" type="number" min="0" max="59" value="0"></div>
-        </div>
-        <div style="display:flex; gap:8px; margin-top:12px">
-          <button id="btnStart" class="primary">Start (MARK)</button>
-          <button id="btnAbort" class="danger">Abort</button>
-          <button id="btnReset">Reset</button>
-        </div>
-      </section>
-    </div>
-
-    <div class="footer">
-      LCARS single-file · Firebase Realtime DB · Operator-only control · DevTools/tamper guards · SFX/TTS · Brick Mode · Live Debug
-      <div id="buildTag" style="margin-top:6px;opacity:.7"></div>
-    </div>
-  </main>
+  <div class="footer">LCARS single-file · Firebase Realtime DB · Operator-gated control · Countdown public</div>
+</main>
 
 <script type="module">
-  // ====== BUILD TAG (so you know this exact file loaded) ======
-  const BUILD = "v5.1.4-max-hotfix; 2025-08-29 00:00Z";
-  console.log("[LCARS] Loaded build:", BUILD);
-  document.addEventListener('DOMContentLoaded', ()=>{ const el=document.getElementById('buildTag'); if(el) el.textContent = "BUILD " + BUILD; });
+/* ───────── Firebase ───────── */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
-  // ───────────────── Firebase SDKs ─────────────────
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-  import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
-  import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+/* ───────── Config (YOUR project) ───────── */
+const firebaseConfig = {
+  apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
+  authDomain: "self-destruct-console.firebaseapp.com",
+  databaseURL: "https://self-destruct-console-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId: "self-destruct-console",
+  storageBucket: "self-destruct-console.firebasestorage.app",
+  messagingSenderId: "669939099742",
+  appId: "1:669939099742:web:310269ae940dd68a84accf"
+};
 
-  // ───────────────── Config (yours) ─────────────────
-  const firebaseConfig = {
-    apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
-    authDomain: "self-destruct-console.firebaseapp.com",
-    databaseURL: "https://self-destruct-console-default-rtdb.europe-west1.firebasedatabase.app/",
-    projectId: "self-destruct-console",
-    storageBucket: "self-destruct-console.firebasestorage.app",
-    messagingSenderId: "669939099742",
-    appId: "1:669939099742:web:310269ae940dd68a84accf"
-  };
+/* ───────── Utilities ───────── */
+const $=s=>document.querySelector(s);
+const now=()=>Date.now();
+const pad2=n=>String(n).padStart(2,'0');
+const fmt={
+  hhmmss(ms){ if(ms<0)ms=0; const t=Math.floor(ms/1000);
+    const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;
+    return (h>0?pad2(h)+':':'')+pad2(m)+':'+pad2(s);},
+  when(ts){return ts?new Date(ts).toLocaleString(): '–';}
+};
+const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 .'\-_]+/g,'').trim().replace(/\s+/g,' ');
+async function sha256(str){const enc=new TextEncoder().encode(str);const buf=await crypto.subtle.digest('SHA-256',enc);return[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function genTokenHex(len=64){const b=new Uint8Array(len/2);crypto.getRandomValues(b);return[...b].map(x=>x.toString(16).padStart(2,'0')).join('')}
 
-  // ───────────────── Helpers ─────────────────
-  const $ = s => document.querySelector(s);
-  const now = () => Date.now();
-  const pad2 = n => String(n).padStart(2,'0');
-  const fmt = {
-    hhmmss(ms){ if(ms<0) ms=0; const t=Math.floor(ms/1000);
-      const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60;
-      return (h>0?pad2(h)+':':'')+pad2(m)+':'+pad2(s); },
-    when(ts){ return ts? new Date(ts).toLocaleString(): '–'; }
-  };
-  const norm = s => (s||'')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase()
-    .replace(/[^a-z0-9 .'\-_]+/g,'')
-    .trim()
-    .replace(/\s+/g,' ');
-  const qs = new URLSearchParams(location.search);
-  const FORCE_OFFLINE = qs.has('offline');  // ?offline
-  const MAINT = qs.has('maint');            // ?maint (bypass DevTools lockout)
+/* ───────── Severity alerts ───────── */
+const ALERT_RANK={lockout:3,offline:2,warn:1}; let currentAlert=null;
+function showAlarm(main,sub){$('#alarmMain').textContent=main||'ALERT';$('#alarmSub').textContent=sub||'';$('#globalAlert').style.display='flex'}
+function hideAlarm(){ $('#globalAlert').style.display='none' }
+function queueToast(text){ const c=$("#cornerToasts"); const n=document.createElement('div'); n.className='toast'; n.textContent=text; c.appendChild(n); setTimeout(()=>n.remove(),6000) }
+function raiseAlert(kind,main,sub){ const rank=ALERT_RANK[kind]||1; if(!currentAlert||rank>=ALERT_RANK[currentAlert.kind]){ showAlarm(main,sub); currentAlert={kind,main,sub}; } else queueToast(main); }
+function clearAlert(kind){ if(currentAlert&&currentAlert.kind===kind){ hideAlarm(); currentAlert=null; } }
+function showBanner(txt){ const b=$("#topBanner"); b.textContent=txt||'ALERT'; b.style.display='block'}
+function hideBanner(){ $("#topBanner").style.display='none' }
 
-  // ───────────────── Overlays ─────────────────
-  const alarm = $('#globalAlert');
-  const alarmMain = $('#alarmMain'), alarmSub = $('#alarmSub');
-  const lkReason=$('#lkReason'), lkReasonTxt=$('#lkReasonTxt'), lkRemain=$('#lkRemain'), lkRemainTxt=$('#lkRemainTxt'), lkUid=$('#lkUid'), lkUidTxt=$('#lkUidTxt');
-  const banner = $('#topBanner');
-  const showAlarm=(main,sub)=>{ alarmMain.textContent=main||'ALERT'; alarmSub.textContent=sub||''; alarm.style.display='flex'; };
-  const hideAlarm=()=>{ alarm.style.display='none'; };
-  const showBanner=(txt)=>{ banner.textContent=txt||'ALERT'; banner.style.display='block'; };
-  const hideBanner=()=>{ banner.style.display='none'; };
+/* ───────── Elements ───────── */
+const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
+const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl'); const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
+const gateOverlay=$('#gateOverlay'), gateLabel=$('#gateLabel');
+const btnSetPin=$('#btnSetPin'), btnUnlock=$('#btnUnlock'), btnSaveOfficers=$('#btnSaveOfficers'), btnArm=$('#btnArm'), btnDisarm=$('#btnDisarm'), btnStart=$('#btnStart'), btnAbort=$('#btnAbort'), btnReset=$('#btnReset');
+const officerSetupSection=$('#officerSetupSection'), officerLockedMsg=$('#officerLockedMsg');
 
-  // ───────────────── Refs ─────────────────
-  const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
-  const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl');
-  const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
-  const gateOverlay=$('#gateOverlay'), gateLabel=$('#gateLabel');
+/* ───────── Tabs ───────── */
+function show(tab){
+  if(tab==='control'){ vControl.style.display='grid'; vCountdown.style.display='none'; tabControl.classList.add('active'); tabCountdown.classList.remove('active'); if(!unlocked) gateOverlay.style.display='flex'; }
+  else { vCountdown.style.display='grid'; vControl.style.display='none'; tabCountdown.classList.add('active'); tabControl.classList.remove('active'); gateOverlay.style.display='none'; }
+}
+tabCountdown.addEventListener('click',()=>show('countdown'));
+tabControl.addEventListener('click',()=>show('control'));
 
-  const btnSetPin=$('#btnSetPin'), btnUnlock=$('#btnUnlock');
-  const btnSaveOfficers=$('#btnSaveOfficers'), btnArm=$('#btnArm'), btnDisarm=$('#btnDisarm'),
-        btnStart=$('#btnStart'), btnAbort=$('#btnAbort'), btnReset=$('#btnReset');
-  const officerSetupSection=$('#officerSetupSection'), officerLockedMsg=$('#officerLockedMsg');
-  const opCard=$('#operatorCard');
+/* ───────── WebAudio sounds (no files) ───────── */
+let audioEnabled=false,tickEnabled=true,audioCtx=null,klaxonNode=null;
+$('#btnToggleSound').addEventListener('click',()=>{ audioEnabled=!audioEnabled; if(audioEnabled&&!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)()} $('#btnToggleSound').textContent=audioEnabled?'Disable Sound':'Enable Sound' });
+$('#chkTick').addEventListener('change',e=> tickEnabled=e.target.checked);
 
-  // Tabs
-  function show(tab){
-    if(tab==='control'){
-      vControl.style.display='grid'; vCountdown.style.display='none';
-      tabControl.classList.add('active'); tabCountdown.classList.remove('active');
-      if(!unlocked) gateOverlay.style.display='flex';
-    } else {
-      vCountdown.style.display='grid'; vControl.style.display='none';
-      tabCountdown.classList.add('active'); tabControl.classList.remove('active');
-      gateOverlay.style.display='none';
-    }
+function tone(freq=880,ms=120,gain=0.06,type='sine'){ if(!audioEnabled||!audioCtx)return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type=type;o.frequency.value=freq; g.gain.value=gain; o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(),ms) }
+function chord(fs=[660,880,1100],ms=220,g=0.05){ if(!audioEnabled||!audioCtx)return; const gnode=audioCtx.createGain(); gnode.gain.value=g; gnode.connect(audioCtx.destination); fs.forEach(f=>{const o=audioCtx.createOscillator();o.frequency.value=f;o.type='sawtooth';o.connect(gnode);o.start();setTimeout(()=>o.stop(),ms)}); }
+function startKlaxon(kind){ stopKlaxon(); if(!audioEnabled||!audioCtx)return; klaxonNode=audioCtx.createOscillator(); klaxonNode.type='square'; const gg=audioCtx.createGain(); gg.gain.value=0.05; klaxonNode.connect(gg).connect(audioCtx.destination);
+  let up=true; const base= kind==='offline'? 300:470; const swing= kind==='offline'? 120:180;
+  klaxonNode.start(); const id=setInterval(()=>{ if(!klaxonNode){clearInterval(id);return} const f=base+(up?swing:0); klaxonNode.frequency.setValueAtTime(f,audioCtx.currentTime); up=!up; },600); klaxonNode.__timer=id; }
+function stopKlaxon(){ if(klaxonNode){ try{klaxonNode.stop()}catch{}; clearInterval(klaxonNode.__timer); klaxonNode.disconnect(); klaxonNode=null; } }
+const SFX={ uiBeep:()=>tone(900,60,0.045,'triangle'), uiConfirm:()=>chord([660,990,1320],170,0.06), lockout:()=>chord([120,240,180],400,0.08),
+             abort:()=>{tone(400,120,0.06,'sawtooth'); setTimeout(()=>tone(260,160,0.06,'sawtooth'),120)}, detonate:()=>chord([90,70,50],900,0.2),
+             tick:()=>tone(1200,30,0.03,'square') };
+
+/* ───────── App state ───────── */
+let state={status:'IDLE',since:now(),auth1:null,auth2:null,startAt:null,durationMs:0,armedAt:null,logPublic:[`[${new Date().toLocaleTimeString()}] Initialized`],controlKeyHash:null};
+let officers={locked:false,o1:{name:'',nameNorm:'',codeHash:''},o2:{name:'',nameNorm:'',codeHash:''}};
+let unlocked=false,ONLINE=false,myUid=null,operatorUid=null,isOperator=false,lockoutUntil=0,offlineVoiced=false,rekeyKeyHash='',DEBUG_FLAG=false,lockoutReason='Security cooldown active';
+
+/* ───────── Online/controls ───────── */
+function disableControls(dis){[btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{if(el) el.disabled=!!dis})}
+function lockoutActive(){return now()<lockoutUntil}
+function setOnline(ok){
+  ONLINE=ok;
+  if(ok){
+    if(lockoutActive()) raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); else { hideBanner(); clearAlert('offline'); }
+    disableControls(false); offlineVoiced=false;
+  }else{
+    raiseAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled');
+    showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE');
+    disableControls(true);
+    if(!offlineVoiced){ speak('Warning. Self destruct system damaged. Firebase offline.'); offlineVoiced=true; }
   }
-  tabCountdown?.addEventListener('click',()=>show('countdown'));
-  tabControl?.addEventListener('click',()=>show('control'));
+  updateAlarmForState(); setControlState();
+}
+function lockoutSubText(){const left=Math.max(0,lockoutUntil-now()); return `Reason: ${lockoutReason} · Time left ${fmt.hhmmss(left)}`}
 
-  // ───────────────── Audio / SFX ─────────────────
-  let audioEnabled=false, tickEnabled=true, audioCtx=null;
-  function ensureSoundControls(){
-    if(document.getElementById('btnToggleSound')) return;
-    const t = document.querySelector('.centerCard .timer'); if(!t) return;
-    t.insertAdjacentHTML('afterend',
-      `<div style="margin-top:10px;display:flex;gap:12px;justify-content:center;align-items:center">
-         <button id="btnToggleSound">Enable Sound</button>
-         <label style="font-size:12px;color:#9fb0c9"><input id="chkTick" type="checkbox" checked> tick each second</label>
-       </div>`);
-    document.getElementById('btnToggleSound').addEventListener('click',()=>{
-      audioEnabled=!audioEnabled;
-      if(audioEnabled && !audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-      document.getElementById('btnToggleSound').textContent = audioEnabled? 'Disable Sound':'Enable Sound';
-      updateAlarmForState();
-    });
-    document.getElementById('chkTick').addEventListener('change',e=> tickEnabled=e.target.checked);
+/* ───────── Voice ───────── */
+function speak(text){ if(!audioEnabled)return; const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1; const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0]; if(pref)u.voice=pref; speechSynthesis.speak(u)}
+
+/* ───────── Render ───────── */
+function render(){
+  const s=state.status;
+  statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase();
+  sinceEl.textContent=fmt.when(state.since);
+  if(s==='COUNTDOWN'){ const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now();
+    timeLeftEl.textContent=fmt.hhmmss(left);
+    barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%';
+    countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${pad2(Math.floor(dur/1000)%60)}s from ${new Date(T0).toLocaleTimeString()}`;
+    timeLeftEl.classList.toggle('flash', left<=30000);
+  } else if(s==='ARMED'){
+    timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; countdownInfoEl.textContent='Awaiting MARK';
+  } else if(s==='DETONATED'){
+    timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); barFill.style.width='100%';
+  } else {
+    timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; countdownInfoEl.textContent='—';
   }
-  ensureSoundControls();
+  logEl.innerHTML=(state.logPublic||[]).slice().reverse().join('\n');
+  updateAlarmForState();
+}
+function updateAlarmForState(){ if(!ONLINE){ startKlaxon('offline'); return } stopKlaxon(); if(state.status==='ARMED'||state.status==='COUNTDOWN'){ startKlaxon('normal') }}
 
-  function speak(text){ if(!audioEnabled) return;
-    const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1;
-    const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0];
-    if(pref) u.voice=pref; speechSynthesis.speak(u);
+/* ───────── Tamper & DevTools ───────── */
+let tamperStrikes=0,tamperTimer=null,mo;
+const protectedSet=new Set([$('#statusPill'),$('#timeLeft')].filter(Boolean));
+function attachGuard(){ if(mo)try{mo.disconnect()}catch{}; mo=new MutationObserver(muts=>{ for(const m of muts){ if(m.type!=='characterData')continue; const host=m.target&&m.target.parentNode; if(host&&protectedSet.has(host)){ appendLog('SECURITY: Tamper detected — DOM mutation in protected elements'); clearTimeout(tamperTimer); tamperStrikes++; tamperTimer=setTimeout(()=>tamperStrikes=0,5000); if(tamperStrikes>=3) enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED'); break; } } }); protectedSet.forEach(n=> mo.observe(n,{characterData:true,subtree:true})) }
+const qs=new URLSearchParams(location.search);
+const MAINT = qs.has('maint') || qs.has('debug');
+function devtoolsLikelyOpen(){ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T) }
+function checkDevtools(){ if(MAINT||DEBUG_FLAG) return; if(devtoolsLikelyOpen()) enterLockout('DEVELOPER TOOLS OPENED') }
+setInterval(checkDevtools,1200);
+window.addEventListener('resize',checkDevtools);
+window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools(); });
+
+/* ───────── Timer / TTS countdown ───────── */
+let lastSpokenSec=null;
+setInterval(()=>{ if(state.status!=='COUNTDOWN')return; const left=(state.startAt||0)+(state.durationMs||0)-now(); const sec=Math.ceil(left/1000);
+  if(tickEnabled && audioEnabled) SFX.tick();
+  if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)) }
+  if(left<=0 && state.status!=='DETONATED'){ setStatus('DETONATED'); appendLog('*** DETONATION ***'); SFX.detonate(); speak('Auto destruct complete. Goodbye.'); stopKlaxon(); }
+  setControlState();
+},1000);
+
+/* ───────── Firebase boot ───────── */
+let app,db,root,cfgRef,securityRef,auth;
+(async function init(){
+  try{
+    app=initializeApp(firebaseConfig);
+    auth=getAuth(app);
+    try{ await signInAnonymously(auth); }
+    catch(err){ showBanner('AUTH ERROR — OFFLINE'); raiseAlert('offline','AUTH ERROR','Enable Anonymous Auth'); disableControls(true); console.error(err); return; }
+    onAuthStateChanged(auth, async (user)=>{ if(!user){ raiseAlert('offline','AUTH ERROR','Anonymous auth missing'); return } myUid=user.uid; appendLog(`NOTICE: This device UID: ${myUid}`); setControlState(); });
+
+    db=getDatabase(app); root=ref(db,'selfDestruct'); cfgRef=ref(db,'selfDestruct/config'); securityRef=ref(db,'selfDestruct/security');
+
+    const rs=await get(root); if(!rs.exists()) await update(root,state);
+    const cs=await get(cfgRef); if(cs.exists()){ const v=cs.val()||{}; officers=v.officers||officers; operatorUid=v.operatorUid||null; rekeyKeyHash=v.rekeyKeyHash||''; } else { await set(cfgRef,{officers,operatorUid:null,rekeyKeyHash:''}) }
+
+    onValue(root,snap=>{ const v=snap.val()||{}; state={...state,...v}; render(); setControlState(); });
+    onValue(cfgRef,snap=>{ const v=snap.val()||{}; if(v.officers) officers=v.officers; if('operatorUid' in v) operatorUid=v.operatorUid; if('rekeyKeyHash' in v) rekeyKeyHash=v.rekeyKeyHash; updateOfficerUI(); setControlState(); });
+    onValue(securityRef,snap=>{ const v=snap.val()||{}; lockoutUntil=v.lockoutUntil||0; if(v.lockoutReason) lockoutReason=v.lockoutReason;
+      if(lockoutActive()){ raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); SFX.lockout(); } else if(ONLINE) clearAlert('lockout'); setControlState(); });
+    onValue(ref(db,'.info/connected'), s=> setOnline(s.val()===true));
+    onValue(ref(db,'selfDestruct/debug'), s=> { DEBUG_FLAG=!!s.val(); if(DEBUG_FLAG) queueToast('DEBUG MODE ACTIVE') });
+
+    setOnline(true);
+    setTimeout(attachGuard, 1200);
+    console.log('[LCARS] Loaded build: v5.2; '+new Date().toISOString());
+  }catch(err){
+    console.error('[Firebase error]',err);
+    const msg=String(err && (err.message||err));
+    if(msg.includes('PERMISSION_DENIED')){ showBanner('ACCESS DENIED — NOT OPERATOR'); setOnline(true); queueToast('Access denied'); }
+    else setOnline(false);
   }
-  function beep(d=120,f=880,v=0.05){
-    if(!audioEnabled||!audioCtx) return;
-    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
-    o.type='sine'; o.frequency.value=f; g.gain.value=v;
-    o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(), d);
-  }
+})();
 
-  // Optional file SFX (auto-used if files exist)
-  const SFX = {
-    uiBeep: new Audio('assets/audio/ui-beep.mp3'),
-    uiConfirm: new Audio('assets/audio/ui-confirm.mp3'),
-    klaxon: new Audio('assets/audio/klaxon.mp3'),
-    offline: new Audio('assets/audio/offline-klaxon.mp3')
-  };
-  SFX.klaxon.loop = true; SFX.offline.loop = true;
-  function playSfx(name){ if(!audioEnabled) return; const a=SFX[name]; if(!a) return; try{ a.currentTime=0; a.play(); }catch{} }
-  function stopSfx(name){ const a=SFX[name]; if(a) a.pause(); }
+/* ───────── DB helpers ───────── */
+function assertOnline(){ if(!ONLINE) throw new Error('OFFLINE'); if(lockoutActive()) throw new Error('LOCKOUT'); if(!isOperator) throw new Error('NOT_OPERATOR') }
+async function write(patch){ assertOnline(); return update(root,patch) }
+async function writeCfg(patch){ return update(cfgRef,patch) }
+async function writeSec(patch){ try{return update(securityRef,patch)}catch{} }
+async function appendLog(line){ try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`; const lp=(state.logPublic||[]).slice(-99).concat(e); state.logPublic=lp; await update(root,{logPublic:lp}); }catch{} }
+function setStatus(s){ try{ assertOnline(); return update(root,{status:s,since:now()}) }catch{ return } }
 
-  let alarmKind=null;
-  function startKlaxon(kind){
-    stopSfx('klaxon'); stopSfx('offline');
-    if(!audioEnabled) return;
-    if(kind==='offline') return playSfx('offline');
-    if(kind==='armed' || kind==='countdown') return playSfx('klaxon');
-  }
-  function updateAlarmForState(){
-    let target=null;
-    if(!ONLINE) target='offline';
-    else if(state.status==='ARMED') target='armed';
-    else if(state.status==='COUNTDOWN') target='countdown';
-    if(target!==alarmKind){ startKlaxon(target); alarmKind=target; }
-  }
+/* ───────── Lockout ───────── */
+async function enterLockout(reason){ lockoutUntil=now()+5*60*1000; lockoutReason=reason||'Security cooldown active';
+  try{ await update(securityRef,{lockoutUntil,lockoutReason,lastUid:myUid||'unknown'}) }catch{}
+  raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); SFX.lockout(); speak('Security alert. Terminal lockout engaged.'); setControlState();
+}
 
-  // ───────────────── App state ─────────────────
-  let state = {
-    status:'IDLE', since:now(), auth1:null, auth2:null,
-    startAt:null, durationMs:0, armedAt:null, log:[`[${new Date().toLocaleTimeString()}] Initialized`],
-    controlKeyHash:null
-  };
-  let officers = { locked:false, o1:{name:'', nameNorm:'', codeHash:''}, o2:{name:'', nameNorm:'', codeHash:''} };
-  let unlocked=false, ONLINE=false, myUid=null, operatorUid=null, isOperator=false;
-  let lockoutUntil=0, offlineVoiced=false, rekeyKeyHash='';
-  let lastLockReason='', lockoutTimer=null;
-  let DEBUG_MODE=false; // ← live from DB
+/* ───────── Operator gate & UI ───────── */
+function setControlState(){
+  isOperator=!!(myUid && operatorUid && myUid===operatorUid);
+  const left=(state.startAt||0)+(state.durationMs||0)-now();
+  const opBlock=!isOperator;
+  btnArm.disabled = opBlock||!ONLINE||!unlocked||state.status!=='IDLE';
+  btnDisarm.disabled = opBlock||!ONLINE||!unlocked||state.status!=='ARMED';
+  btnStart.disabled = opBlock||!ONLINE||!unlocked||state.status!=='ARMED';
+  btnAbort.disabled = opBlock||!ONLINE||!unlocked||state.status!=='COUNTDOWN'||left<=15000;
+  btnReset.disabled = opBlock||!ONLINE||!unlocked||!(['ABORTED','DETONATED'].includes(state.status));
+  btnSaveOfficers.disabled = opBlock||!ONLINE||!unlocked||officersAreLocked();
 
-  function disableControls(dis){ [btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{ if(el) el.disabled = dis; }); }
-  function lockoutActive(){ return now() < lockoutUntil; }
-  function setOnline(ok, msg){
-    ONLINE=ok;
-    if(ok){
-      if(lockoutActive() && !DEBUG_MODE){
-        showAlarm('TERMINAL LOCKOUT', `Security cooldown`);
-        engageBrickMode(); updateLockoutOverlay();
-      } else { hideAlarm(); document.body.classList.remove('brick'); }
-      hideBanner(); disableControls(false); offlineVoiced=false;
-    } else {
-      showAlarm('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', msg||'Firebase unreachable · controls disabled');
-      showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE'); disableControls(true);
-      if(!offlineVoiced){ speak('Warning. Self destruct system damaged. Firebase offline.'); offlineVoiced=true; }
-    }
-    if(DEBUG_MODE){ showBanner('DEBUG MODE — lockout UI suppressed'); }
-    updateAlarmForState(); setControlState();
-  }
+  $('#uidVal').textContent=myUid||'—';
+  $('#opStatus').textContent=isOperator?'OPERATOR DEVICE':'VIEWER DEVICE';
+}
+function refreshPinUI(){ btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block' }
+function officersAreLocked(){ return !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash) }
+function updateOfficerUI(){ if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; } else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; } }
 
-  // ───────────────── Brick Mode (code-only lockout) ─────────────────
-  const originalSetInterval = window.setInterval.bind(window);
-  const originalAddEventListener = window.addEventListener.bind(window);
-  let trackedIntervals = [], brickApplied=false;
-  function neutralizeHandlers(){
-    const blocker = e=>{ if(brickApplied){ e.stopImmediatePropagation(); e.preventDefault(); } };
-    ['click','mousedown','mouseup','touchstart','keydown','keypress','keyup','submit','input','change','contextmenu'].forEach(ev=>{
-      originalAddEventListener(ev, blocker, true);
-    });
-    document.querySelectorAll('button,input,select,textarea,a').forEach(el=>{ try{ el.disabled=true; el.tabIndex=-1; el.setAttribute('aria-disabled','true'); }catch{} });
-  }
-  function engageBrickMode(){
-    if(brickApplied || DEBUG_MODE) return; // suppressed in debug
-    brickApplied=true;
-    document.body.classList.add('brick');
-    neutralizeHandlers();
-    try{ trackedIntervals.forEach(id=>clearInterval(id)); trackedIntervals=[]; }catch{}
-    lkReason.style.display='block'; lkRemain.style.display='block'; lkUid.style.display='block';
-  }
-  function updateLockoutOverlay(){
-    lkReasonTxt.textContent=lastLockReason||'Security policy';
-    lkUidTxt.textContent=myUid||'—';
-    lkRemainTxt.textContent=fmt.hhmmss(Math.max(0, lockoutUntil - now()));
-  }
+/* Operator actions */
+$('#btnCopyUid').addEventListener('click',async()=>{ try{await navigator.clipboard.writeText(myUid||''); queueToast('UID copied')}catch{} });
+$('#btnSetAsOperator').addEventListener('click',async()=>{ if(!myUid) return alert('No UID yet');
+  const curSnap=await get(child(cfgRef,'operatorUid')); const cur=curSnap.exists()?curSnap.val():null;
+  if(cur && cur!==myUid) return alert('Operator already set to another device.');
+  await writeCfg({operatorUid:myUid}); operatorUid=myUid; await appendLog('Operator UID set to current device.'); setControlState(); alert('This device registered as OPERATOR.') });
+$('#btnResetOperator').addEventListener('click',async()=>{ try{ if(!isOperator) return alert('Only current operator can reset.'); if(!unlocked) return alert('Unlock CONTROL first.');
+  if(!confirm('Reset operator to null? Next device can claim operator.')) return;
+  const pin=prompt('Enter Operator PIN to confirm reset'); if(!pin) return; if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
+  await writeCfg({operatorUid:null}); operatorUid=null; await appendLog('Operator reset to null by current operator.'); setControlState(); alert('Operator reset.') }catch(e){alert('Reset failed.')} });
 
-  // ───────────────── Render (guard-paused) ─────────────────
-  let guardPaused = 0;
-  const pauseGuard = fn => { guardPaused++; try { return fn(); } finally { guardPaused--; } };
+/* Recovery */
+$('#btnGenToken').addEventListener('click',async()=>{ const t=genTokenHex(64); $('#rkToken').value=t; try{await navigator.clipboard.writeText(t); alert('Recovery token generated & copied')}catch{alert('Token generated. Copy it now.')}})
+$('#btnSetRecovery').addEventListener('click',async()=>{ if(!isOperator||!unlocked) return alert('Unlock + operator required'); const pin=$('#rkPin').value.trim(), tok=$('#rkToken').value.trim(); if(!pin||!tok) return alert('Enter PIN and token');
+  if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN'); const h=await sha256(tok); await writeCfg({rekeyKeyHash:h}); await appendLog('Recovery token rotated.'); queueToast('Recovery token set') })
+$('#btnRekey').addEventListener('click',async()=>{ if(!isOperator||!unlocked) return alert('Unlock + operator required'); const pin=$('#rkPin').value.trim(), tok=$('#rkToken').value.trim();
+  if(!pin||!tok) return alert('Enter PIN and token'); if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
+  const h=await sha256(tok); if(!rekeyKeyHash || h!==rekeyKeyHash) return alert('Bad recovery token');
+  await update(cfgRef,{officers:null,rekeyKeyHash:''}); officers={locked:false,o1:{},o2:{}}; updateOfficerUI(); await appendLog('BREAK-GLASS: Officers cleared for re-enrollment.'); speak('Break glass authorized. Officers cleared.') })
 
-  function render(){
-    const s=state.status;
-    if(statusPill){ statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); }
-    if(sinceEl) sinceEl.textContent=fmt.when(state.since);
+/* PIN / Unlock */
+btnSetPin.addEventListener('click',async()=>{ try{ if(state.controlKeyHash) return alert('PIN already set.'); const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
+  await write({controlKeyHash: await sha256(pin)}); await appendLog('Operator PIN set.'); speak('Operator PIN set.'); refreshPinUI(); SFX.uiConfirm(); }catch(e){ alert('Denied') } })
+btnUnlock.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE) return alert('System offline.');
+  const pin=$('#pin').value.trim(); if(!pin) return; if(!state.controlKeyHash) return alert('No PIN set yet.');
+  if(await sha256(pin)!==state.controlKeyHash){ await fail('unlock'); gateLabel.textContent='ACCESS DENIED'; gateLabel.style.color='#ff9b9b'; tone(240,120,0.08,'sawtooth'); return; }
+  unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none'; setControlState(); speak('Access granted.'); SFX.uiConfirm();
+  const ua=(navigator.userAgent||'')+'|'+(navigator.platform||''); const uah=await sha256(ua); const last=(await get(child(securityRef,'lastOperatorUAHash'))).val()||''; if(uah!==last){ await writeSec({lastOperatorUAHash: uah}); await appendLog('SECURITY: New device used to unlock CONTROL'); queueToast('New device notice') } })
 
-    if(s==='COUNTDOWN'){
-      const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now();
-      if(timeLeftEl) timeLeftEl.textContent=fmt.hhmmss(left);
-      if(barFill) barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%';
-      if(countdownInfoEl) countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${pad2(Math.floor(dur/1000)%60)}s from ${new Date(T0).toLocaleTimeString()}`;
-      if(timeLeftEl) timeLeftEl.classList.toggle('flash', left<=30000);
-      if(left<=0 && state.status!=='DETONATED'){
-        setStatus('DETONATED'); appendLog('*** DETONATION ***'); speak('Auto destruct complete. Goodbye.');
-        stopSfx('klaxon'); stopSfx('offline');
-      }
-    } else if(s==='ARMED'){
-      if(timeLeftEl) { timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); }
-      if(barFill) barFill.style.width='0%';
-      if(countdownInfoEl) countdownInfoEl.textContent='Awaiting MARK';
-    } else if(s==='DETONATED'){
-      if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
-      if(barFill) barFill.style.width='100%';
-    } else {
-      if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
-      if(barFill) barFill.style.width='0%';
-      if(countdownInfoEl) countdownInfoEl.textContent='—';
-    }
-    if(logEl) logEl.innerHTML=(state.log||[]).slice().reverse().join('\n');
-    updateAlarmForState();
-  }
+/* Officers */
+btnSaveOfficers.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText());
+  try{ if(!unlocked) return alert('Unlock CONTROL first'); if(officersAreLocked()) return alert('Officers already set.');
+    const n1=$('#setupO1Name').value.trim(), p1=$('#setupO1Pin').value.trim(), n2=$('#setupO2Name').value.trim(), p2=$('#setupO2Pin').value.trim(); if(!n1||!p1||!n2||!p2) return alert('Enter both names and pins.');
+    officers={locked:true,o1:{name:n1,nameNorm:norm(n1),codeHash:await sha256(p1)},o2:{name:n2,nameNorm:norm(n2),codeHash:await sha256(p2)}}; await writeCfg({officers}); updateOfficerUI(); await appendLog('Officers set.'); SFX.uiConfirm(); speak('Officer credentials stored.') }
+  catch(e){ await appendLog('SECURITY: Non-operator attempted to modify config') } })
 
-  // ───────────────── Tamper guard ─────────────────
-  const protectedNodes=[statusPill, timeLeftEl].filter(Boolean);
-  const protectedSet = new Set(protectedNodes);
-  let tamperStrikes = 0, tamperTimer = null, mo;
-  function attachGuard(){
-    if(mo) try{ mo.disconnect(); }catch{}
-    mo = new MutationObserver(muts=>{
-      if(guardPaused) return;
-      for(const m of muts){
-        if(m.type!=='characterData') continue;
-        const host = m.target && m.target.parentNode;
-        if(host && protectedSet.has(host)){
-          appendLog('SECURITY: Tamper detected — DOM mutation in protected elements');
-          clearTimeout(tamperTimer); tamperStrikes++; tamperTimer = setTimeout(()=> tamperStrikes=0, 5000);
-          if(tamperStrikes>=3) { lastLockReason='UNAUTHORIZED CHANGE ATTEMPT DETECTED'; enterLockout(lastLockReason); }
-          break;
-        }
-      }
-    });
-    protectedNodes.forEach(n=> mo.observe(n,{ characterData:true, subtree:true, childList:false, attributes:false }));
-  }
+/* Controls */
+btnArm.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='IDLE') return; if(!officersAreLocked()) return alert('Set officers first.');
+  const n1=norm($('#verifyO1Name').value), p1=$('#verifyO1Pin').value.trim(), n2=norm($('#verifyO2Name').value), p2=$('#verifyO2Pin').value.trim(); if(!n1||!n2||!p1||!p2) return alert('Enter both names and pins.');
+  const ok1=(n1===officers.o1.nameNorm)&&(await sha256(p1)===officers.o1.codeHash); const ok2=(n2===officers.o2.nameNorm)&&(await sha256(p2)===officers.o2.codeHash);
+  const okAlt1=(n1===officers.o2.nameNorm)&&(await sha256(p1)===officers.o2.codeHash); const okAlt2=(n2===officers.o1.nameNorm)&&(await sha256(p2)===officers.o1.codeHash);
+  if(!((ok1&&ok2)||(okAlt1&&okAlt2))) { await fail('verify'); return alert('Verification failed.') }
+  await write({auth1:{at:now()},auth2:{at:now()},armedAt:now()}); await setStatus('ARMED'); await appendLog('Armed by two officers.');
+  speak('Computer. Authorization one confirmed.'); setTimeout(()=>speak('Identity confirmed. Additional authorization required.'),1200); setTimeout(()=>speak('Computer. Authorization two confirmed.'),3200); setTimeout(()=>speak('Identity confirmed. Auto destruct sequence armed.'),4800);
+  updateAlarmForState();
+})
+btnDisarm.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked) return;
+  await write({auth1:null,auth2:null,armedAt:null}); await setStatus('IDLE'); await appendLog('Disarmed.'); stopKlaxon(); SFX.uiConfirm(); speak('Auto destruct disarmed.') })
+btnStart.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='ARMED') return;
+  const m=Math.max(0,parseInt($('#mins').value||'0',10)); const s=Math.max(0,Math.min(59,parseInt($('#secs').value||'0',10))); const durationMs=(m*60+s)*1000; const startAt=now();
+  await write({startAt,durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`); speak(`Set the countdown for ${m} minutes ${s} seconds from my mark. Mark.`); setTimeout(()=> speak(`Sequence initiated. Auto destruct in ${m} minutes ${s} seconds.`),1300); updateAlarmForState(); })
+btnAbort.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='COUNTDOWN') return;
+  const left=(state.startAt||0)+(state.durationMs||0)-now(); if(left<=15000){ await appendLog('Abort rejected — inside T-15s.'); queueToast('Abort locked inside T-15s'); return; }
+  await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); stopKlaxon(); SFX.abort(); speak('Auto destruct sequence aborted.'); })
+btnReset.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked) return;
+  const newState={ status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash||null, logPublic:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
+  await update(root,newState); await update(cfgRef,{officers}); stopKlaxon(); SFX.uiConfirm(); speak('System reset to idle.'); })
 
-  // ───────────────── DevTools lockout ─────────────────
-  let dtStrikes=0, dtTimer=null;
-  const devtoolsLikelyOpen=()=>{ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T); };
-  function checkDevtools(){ if(MAINT) return; if(devtoolsLikelyOpen()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) { lastLockReason='DEVELOPER TOOLS OPENED'; enterLockout(lastLockReason); } } }
-  setInterval(checkDevtools,1200);
-  window.addEventListener('resize',checkDevtools);
-  window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools(); });
+/* ───────── Failure rate-limit ───────── */
+async function fail(kind){ try{ const key=`fail_${kind}_${Math.floor(now()/60000)}`; const snap=await get(child(securityRef,key)); const n=(snap.exists()?(snap.val()||0):0)+1; await writeSec({[key]:n}); if(n>=5) await enterLockout('Repeated failed attempts'); }catch{} }
 
-  // ───────────────── Timer + voice 5..1 ─────────────────
-  let lastSpokenSec=null;
-  setInterval(()=>{
-    if(state.status!=='COUNTDOWN') return;
-    pauseGuard(render);
-    const left=(state.startAt||0)+(state.durationMs||0)-now();
-    const sec=Math.ceil(left/1000);
-    if(tickEnabled && audioEnabled && sec>0 && (sec!==window.__lastSec)){
-      window.__lastSec=sec; beep(70, left<=5000?1200: left<=30000?1000:700, left<=30000?0.09:0.05);
-    }
-    if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)); }
-    if(left<=0 && state.status!=='DETONATED'){
-      setStatus('DETONATED'); appendLog('*** DETONATION ***'); speak('Auto destruct complete. Goodbye.');
-      stopSfx('klaxon'); stopSfx('offline');
-    }
-    setControlState();
-  }, 200);
-
-  // ───────────────── Crypto ─────────────────
-  async function sha256(str){
-    const enc=new TextEncoder().encode(str);
-    const buf=await crypto.subtle.digest('SHA-256', enc);
-    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  function genTokenHex(len=64){
-    const b=new Uint8Array(len/2); crypto.getRandomValues(b);
-    return [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
-  }
-
-  // ───────────────── Config validation ─────────────────
-  function validateConfig(){
-    const cfg=firebaseConfig;
-    if(!cfg.apiKey||!cfg.authDomain||!cfg.databaseURL||!cfg.projectId||!cfg.appId) return 'CONFIG MISSING — OFFLINE';
-    try{ const h=new URL(cfg.databaseURL).hostname; if(!/\.firebasedatabase\.app$/i.test(h)) return 'BAD databaseURL — OFFLINE'; }catch{ return 'BAD databaseURL — OFFLINE'; }
-    if(!/\.firebaseapp\.com$/i.test(cfg.authDomain)) return 'BAD authDomain — OFFLINE';
-    return null;
-  }
-  const withTimeout = (p,ms=6000)=> Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms))]);
-
-  // ───────────────── Firebase boot + auth ─────────────────
-  let app, db, root, cfgRef, securityRef, auth;
-  (async function init(){
-    const cfgErr = validateConfig();
-    if(cfgErr || FORCE_OFFLINE){ setOnline(false, cfgErr||'OFFLINE (forced)'); return; }
-
-    try{
-      app = initializeApp(firebaseConfig);
-      auth = getAuth(app);
-
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        if (err && err.code === 'auth/configuration-not-found') {
-          showAlarm('AUTH NOT ENABLED — OFFLINE', 'Enable Anonymous in Firebase → Authentication → Sign-in method');
-        } else {
-          showAlarm('AUTH ERROR — OFFLINE', String(err && (err.message||err)));
-        }
-        showBanner('AUTH ERROR — OFFLINE');
-        disableControls(true);
-        console.error('[Auth error]', err);
-        return; // abort init early
-      }
-
-      onAuthStateChanged(auth, async (user)=>{
-        if(!user){ setOnline(false, 'AUTH ERROR — OFFLINE'); return; }
-        myUid=user.uid; await appendLog(`NOTICE: This device UID: ${myUid}`);
-        setControlState();
-      });
-
-      db = getDatabase(app);
-      root = ref(db, 'selfDestruct');
-      cfgRef  = ref(db, 'selfDestruct/config');
-      securityRef = ref(db, 'selfDestruct/security');
-
-      // Initial pulls
-      const s = await withTimeout(get(root), 6000).catch(()=>({exists:()=>false,val:()=>null}));
-      if(s && s.exists && s.exists()) state = { ...state, ...s.val() };
-
-      const c = await withTimeout(get(cfgRef), 6000).catch(()=>({exists:()=>false,val:()=>null}));
-      if(c && c.exists && c.exists()){
-        const v=c.val()||{}; officers = v.officers || officers;
-        operatorUid = v.operatorUid || null; rekeyKeyHash = v.rekeyKeyHash || '';
-      } else {
-        await set(cfgRef, { officers, operatorUid:null, rekeyKeyHash:'' });
-      }
-
-      // Fine-grained real-time listeners (public)
-      onValue(ref(db,'selfDestruct/status'), snap=>{ state.status=snap.val()||'IDLE'; pauseGuard(render); setControlState(); });
-      onValue(ref(db,'selfDestruct/since'),  snap=>{ state.since=snap.val()||now(); pauseGuard(render); });
-      onValue(ref(db,'selfDestruct/startAt'),snap=>{ state.startAt=snap.val()||null; pauseGuard(render); });
-      onValue(ref(db,'selfDestruct/durationMs'), snap=>{ state.durationMs=snap.val()||0; pauseGuard(render); });
-
-      // Live debug toggle
-      onValue(ref(db,'selfDestruct/debug'), snap=>{
-        DEBUG_MODE = !!snap.val();
-        if(DEBUG_MODE){
-          hideAlarm(); document.body.classList.remove('brick');
-          showBanner('DEBUG MODE — lockout UI suppressed');
-        }else{
-          hideBanner();
-          if(lockoutActive()){ showAlarm('TERMINAL LOCKOUT','Security cooldown'); engageBrickMode(); }
-        }
-        setControlState();
-      });
-
-      // Config + sensitive (operator only)
-      onValue(cfgRef, snap=>{
-        const v=snap.val()||{}; officers = v.officers? v.officers : officers;
-        operatorUid = v.operatorUid || operatorUid; rekeyKeyHash = v.rekeyKeyHash || rekeyKeyHash;
-        updateOfficerUI(); setControlState();
-        if(myUid && operatorUid === myUid) startOperatorOnlyListeners();
-      });
-
-      // Public log mirror
-      onValue(ref(db,'selfDestruct/logPublic'), snap=>{
-        const arr=snap.val()||[]; if(logEl) logEl.innerHTML = arr.slice().reverse().join('\n');
-      });
-
-      // Lockout channel
-      onValue(securityRef, snap=>{
-        const v=snap.val()||{}; lockoutUntil = v.lockoutUntil || 0;
-        if(lockoutActive() && !DEBUG_MODE){
-          showAlarm('TERMINAL LOCKOUT', 'Security cooldown active'); engageBrickMode();
-          if(lockoutTimer) clearInterval(lockoutTimer); lockoutTimer = setInterval(updateLockoutOverlay, 500);
-        } else {
-          if(lockoutTimer) clearInterval(lockoutTimer);
-          if(ONLINE) hideAlarm();
-          document.body.classList.remove('brick');
-        }
-        setControlState();
-      });
-
-      const connectedRef = ref(db, '.info/connected');
-      onValue(connectedRef, snap=> setOnline(snap.val()===true));
-
-      // Start guard after first paint
-      setTimeout(attachGuard, 1000);
-
-    }catch(err){
-      console.error('[Firebase error]', err);
-      setOnline(false, 'FIREBASE ERROR — OFFLINE');
-    }
-  })();
-
-  function startOperatorOnlyListeners(){
-    if(startOperatorOnlyListeners._wired) return;
-    startOperatorOnlyListeners._wired=true;
-    onValue(ref(db,'selfDestruct/controlKeyHash'), s=>{ state.controlKeyHash=s.val()||null; refreshPinUI(); });
-    onValue(ref(db,'selfDestruct/armedAt'), s=>{ state.armedAt=s.val()||null; });
-    onValue(ref(db,'selfDestruct/auth1'), s=>{/*private*/});
-    onValue(ref(db,'selfDestruct/auth2'), s=>{/*private*/});
-  }
-
-  // ───────────────── DB helpers ─────────────────
-  function assertOnline(){
-    if(!ONLINE) throw new Error('OFFLINE');
-    if(lockoutActive() && !DEBUG_MODE) throw new Error('LOCKOUT');
-    if(!isOperator) throw new Error('NOT_OPERATOR');
-  }
-  async function write(patch){ assertOnline(); return update(root, patch); }
-  async function writeCfg(patch){ return update(cfgRef, patch); }
-  async function writeSec(patch){ try{ return update(securityRef, patch); }catch{} }
-  async function appendLog(line){
-    try{
-      const e=`[${new Date().toLocaleTimeString()}] ${line}`;
-      // Private log (best-effort)
-      try{
-        const pr = await get(child(root,'log'));
-        const priv=(pr.exists()? pr.val():[]).slice(-99); priv.push(e);
-        await update(root, { log: priv });
-      }catch{}
-      // Public mirror (scrubbed UIDs)
-      const sp = await get(child(root,'logPublic'));
-      const pub=(sp.exists()? sp.val():[]).slice(-99); pub.push(e.replace(/[A-Za-z0-9_-]{28,}/g,'[UID]'));
-      await update(root, { logPublic: pub });
-    }catch{}
-  }
-  function setStatus(s){ try{ assertOnline(); return update(root, { status:s, since: now() }); }catch{ return; } }
-
-  async function enterLockout(sub){
-    lockoutUntil = now()+5*60*1000;
-    lastLockReason=sub||'Security policy';
-    try { if (securityRef) await update(securityRef,{ lockoutUntil }); } catch {}
-    if(!DEBUG_MODE){
-      showAlarm('TERMINAL LOCKOUT', 'Security cooldown active');
-      engageBrickMode(); updateLockoutOverlay();
-    }else{
-      showBanner('DEBUG MODE — lockout UI suppressed');
-    }
-    appendLog(`LOCKOUT: ${lastLockReason} (uid ${myUid||'—'})`);
-    setControlState();
-  }
-
-  // ───────────────── Operator gate & UI ─────────────────
-  function setControlState(){
-    const left = (state.startAt||0)+(state.durationMs||0)-now();
-    isOperator = !!(myUid && operatorUid && myUid === operatorUid);
-
-    const blocked = (!isOperator) || (!ONLINE) || (!unlocked) || (lockoutActive() && !DEBUG_MODE);
-    if(btnArm)   btnArm.disabled   = blocked || state.status!=='IDLE';
-    if(btnDisarm)btnDisarm.disabled= blocked || state.status!=='ARMED';
-    if(btnStart) btnStart.disabled = blocked || state.status!=='ARMED';
-    if(btnAbort) btnAbort.disabled = blocked || state.status!=='COUNTDOWN' || left<=15000;
-    if(btnReset) btnReset.disabled = blocked || !(['ABORTED','DETONATED'].includes(state.status));
-    if(btnSaveOfficers) btnSaveOfficers.disabled = blocked || officersAreLocked();
-
-    if(opCard){
-      $('#uidVal').textContent = myUid || '—';
-      $('#opStatus').textContent = isOperator? 'OPERATOR DEVICE' : 'VIEWER DEVICE';
-    }
-  }
-
-  // ——— SINGLE definition; no duplicates ———
-  function officersAreLocked(){
-    try{
-      return !!(officers && officers.locked && officers.o1 && officers.o2 &&
-                officers.o1.codeHash && officers.o2.codeHash);
-    }catch{ return false; }
-  }
-
-  function updateOfficerUI(){
-    if(!officerSetupSection || !officerLockedMsg) return;
-    if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; }
-    else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; }
-  }
-
-  // Admin panel handlers
-  $('#btnCopyUid')?.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(myUid||''); alert('UID copied'); }catch{ alert('Copy failed'); }});
-  $('#btnSetAsOperator')?.addEventListener('click', async ()=>{
-    if(!myUid) return alert('No UID yet. Try again in a second.');
-    try{
-      const curSnap = await get(child(cfgRef,'operatorUid'));
-      const cur = curSnap.exists()? curSnap.val() : null;
-      if(cur && cur!==myUid){ alert('Operator already set to another device.'); return; }
-      await writeCfg({ operatorUid: myUid });
-      operatorUid=myUid;
-      await appendLog('Operator UID set to current device.');
-      setControlState();
-      alert('This device registered as OPERATOR.');
-    }catch(e){ console.error(e); alert('Failed to set operator UID. Check rules/connection.'); }
-  });
-  $('#btnResetOperator')?.addEventListener('click', async ()=>{
-    try{
-      if(!isOperator) return alert('Only current operator can reset.');
-      if(!unlocked) return alert('Unlock CONTROL first.');
-      if(!confirm('Reset operator to null? Next device can claim operator.')) return;
-      const pin = prompt('Enter Operator PIN to confirm reset');
-      if(!pin) return;
-      if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
-      await writeCfg({ operatorUid: null });
-      operatorUid = null;
-      await appendLog('Operator reset to null by current operator.');
-      setControlState();
-      alert('Operator reset. Reload on the new device and claim operator.');
-    }catch(e){ console.error(e); alert('Reset failed. Check rules/connection.'); }
-  });
-
-  // Break-glass (rekey)
-  $('#btnGenToken')?.addEventListener('click', async ()=>{
-    const t=genTokenHex(64); $('#rkToken').value=t;
-    try{ await navigator.clipboard.writeText(t); alert('Recovery token generated & copied'); }catch{ alert('Token generated. Copy it now.'); }
-  });
-  $('#btnSetRecovery')?.addEventListener('click', async ()=>{
-    if(!isOperator || !unlocked) return alert('Unlock + operator required');
-    const pin=$('#rkPin').value.trim(); const tok=$('#rkToken').value.trim();
-    if(!pin||!tok) return alert('Enter PIN and token');
-    if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
-    const h=await sha256(tok); await writeCfg({ rekeyKeyHash:h });
-    await appendLog('Recovery token rotated.'); alert('Recovery token set. Keep it safe.');
-  });
-  $('#btnRekey')?.addEventListener('click', async ()=>{
-    if(!isOperator || !unlocked) return alert('Unlock + operator required');
-    if(lockoutActive() && !DEBUG_MODE) return alert('Locked out');
-    const pin=$('#rkPin').value.trim(); const tok=$('#rkToken').value.trim();
-    if(!pin||!tok) return alert('Enter PIN and token');
-    if(await sha256(pin)!==state.controlKeyHash){ await fail('rekey'); return alert('Wrong operator PIN'); }
-    const h=await sha256(tok);
-    if(!rekeyKeyHash || h!==rekeyKeyHash){ await fail('rekey'); return alert('Bad recovery token'); }
-    await update(cfgRef,{ officers:null, rekeyKeyHash:'' });
-    officers={locked:false,o1:{},o2:{}}; updateOfficerUI();
-    await appendLog('BREAK-GLASS: Officers cleared for re-enrollment.'); speak('Break glass authorized. Officers cleared.');
-  });
-
-  // ───────────────── Failure rate-limit ─────────────────
-  async function fail(kind){
-    try{
-      const key = `fail_${kind}_${Math.floor(now()/60000)}`;
-      const snap = await get(child(securityRef,key));
-      const n = (snap.exists()? (snap.val()||0):0)+1;
-      await writeSec({ [key]: n });
-      if(n>=5) await enterLockout('Repeated failed attempts');
-    }catch{}
-  }
-
-  // ───────────────── PIN ─────────────────
-  function refreshPinUI(){ if(!btnSetPin) return; btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block'; }
-  $('#btnSetPin')?.addEventListener('click', async ()=>{
-    try{
-      if(!ONLINE) return alert('System offline.');
-      if(state.controlKeyHash) return alert('PIN already set.');
-      const cur = (await get(child(cfgRef,'operatorUid'))).val() ?? null;
-      if(cur===null && myUid) await writeCfg({ operatorUid: myUid });
-      const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
-      const hash=await sha256(pin); await write({ controlKeyHash: hash });
-      await appendLog('Operator PIN set.'); speak('Operator PIN set.');
-      refreshPinUI();
-    }catch(e){ if(String(e).includes('LOCKOUT')) showAlarm('TERMINAL LOCKOUT','Security cooldown active'); else alert('Denied'); }
-  });
-
-  $('#btnUnlock')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE) return alert('System offline.');
-    const pin=$('#pin').value.trim(); if(!pin) return;
-    if(!state.controlKeyHash) return alert('No PIN set yet.');
-    if(await sha256(pin)!==state.controlKeyHash){
-      await fail('unlock'); gateLabel.textContent='ACCESS DENIED'; gateLabel.style.color='#ff9b9b'; return;
-    }
-    unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none';
-    setControlState(); speak('Access granted.');
-    const ua = (navigator.userAgent||'')+'|'+(navigator.platform||''); const uah = await sha256(ua);
-    try{
-      const lastSnap = await get(child(securityRef,'lastOperatorUAHash'));
-      const last = lastSnap.exists()? lastSnap.val():'';
-      if(uah!==last){ await writeSec({ lastOperatorUAHash: uah }); await appendLog('SECURITY: New device used to unlock CONTROL'); speak('Security notice. New device.'); }
-    }catch{}
-  });
-
-  // ───────────────── Officers ─────────────────
-  $('#btnSaveOfficers')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    try{
-      assertOnline(); if(!unlocked) return alert('Unlock CONTROL first');
-      if(officersAreLocked()) return alert('Officers already set.');
-      const n1=$('#setupO1Name').value.trim(); const p1=$('#setupO1Pin').value.trim();
-      const n2=$('#setupO2Name').value.trim(); const p2=$('#setupO2Pin').value.trim();
-      if(!n1||!p1||!n2||!p2) return alert('Enter both names and pins.');
-      officers = { locked:true, o1:{ name:n1, nameNorm:norm(n1), codeHash: await sha256(p1) },
-                             o2:{ name:n2, nameNorm:norm(n2), codeHash: await sha256(p2) } };
-      await writeCfg({ officers }); updateOfficerUI();
-      await appendLog('Officers set.'); speak('Officer credentials stored.');
-    }catch(e){ if(String(e).includes('NOT_OPERATOR')) await appendLog('SECURITY: Non-operator attempted to modify config'); }
-  });
-
-  // ───────────────── Controls ─────────────────
-  $('#btnArm')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE || !unlocked || state.status!=='IDLE') return;
-    if(!officersAreLocked()) return alert('Set officers first.');
-    const n1 = norm($('#verifyO1Name').value), p1=$('#verifyO1Pin').value.trim();
-    const n2 = norm($('#verifyO2Name').value), p2=$('#verifyO2Pin').value.trim();
-    if(!n1||!n2||!p1||!p2) return alert('Enter both names and pins.');
-    const ok1 = (n1===officers.o1.nameNorm) && (await sha256(p1)===officers.o1.codeHash);
-    const ok2 = (n2===officers.o2.nameNorm) && (await sha256(p2)===officers.o2.codeHash);
-    const okAlt1 = (n1===officers.o2.nameNorm) && (await sha256(p1)===officers.o2.codeHash);
-    const okAlt2 = (n2===officers.o1.nameNorm) && (await sha256(p2)===officers.o1.codeHash);
-    if(!((ok1&&ok2)||(okAlt1&&okAlt2))) { await fail('verify'); return alert('Verification failed.'); }
-
-    await write({auth1:{at:now()}, auth2:{at:now()}, armedAt:now()});
-    await setStatus('ARMED'); await appendLog('Armed by two officers.');
-    speak('Computer. Authorization one confirmed.');
-    setTimeout(()=> speak('Identity confirmed. Additional authorization required.'), 1200);
-    setTimeout(()=> speak('Computer. Authorization two confirmed.'), 3000);
-    setTimeout(()=> speak('Identity confirmed. Auto destruct sequence armed.'), 4800);
-    setControlState(); updateAlarmForState();
-  });
-
-  $('#btnDisarm')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE || !unlocked) return;
-    if(state.status!=='ARMED') return alert('Disarm available only when ARMED.');
-    await write({auth1:null, auth2:null, armedAt:null});
-    await setStatus('IDLE'); await appendLog('Disarmed.'); speak('Auto destruct disarmed.');
-    stopSfx('klaxon'); setControlState();
-  });
-
-  $('#btnStart')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE || !unlocked || state.status!=='ARMED') return;
-    const m=Math.max(0, parseInt($('#mins').value||'0',10));
-    const s=Math.max(0, Math.min(59, parseInt($('#secs').value||'0',10)));
-    const durationMs=(m*60+s)*1000; const startAt=now();
-    await write({startAt, durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`);
-    speak(`Set the countdown for ${m} minutes ${s} seconds from my mark. Mark.`);
-    setTimeout(()=> speak(`Sequence initiated. Auto destruct in ${m} minutes ${s} seconds.`), 1300);
-    setControlState(); updateAlarmForState();
-  });
-
-  $('#btnAbort')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE || !unlocked || state.status!=='COUNTDOWN') return;
-    const left = (state.startAt||0)+(state.durationMs||0)-now();
-    if(left <= 15000){ await appendLog('Abort rejected — inside T-15s.'); return; }
-    await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); speak('Auto destruct sequence aborted.');
-    stopSfx('klaxon'); setControlState();
-  });
-
-  $('#btnReset')?.addEventListener('click', async ()=>{
-    if(lockoutActive() && !DEBUG_MODE) return showAlarm('TERMINAL LOCKOUT','Security cooldown active');
-    if(!ONLINE || !unlocked) return;
-    if(!(['ABORTED','DETONATED'].includes(state.status))) return alert('Reset after ABORTED/DETONATED only.');
-    const newState = { status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null,
-      controlKeyHash: state.controlKeyHash || null, log:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
-    await set(root, newState); await update(cfgRef,{ officers });
-    speak('System reset to idle.'); stopSfx('klaxon'); setControlState();
-  });
-
-  // Boot render + start guard after first data
-  pauseGuard(render);
-
-  // Minimal global error hook so failures are visible
-  window.addEventListener('error', e=>{
-    console.error('[JS error]', e.message);
-    try{ appendLog('CLIENT ERROR: '+e.message); }catch{}
-  });
+/* ───────── Initial render ───────── */
+render();
 </script>
 </body>
 </html>
