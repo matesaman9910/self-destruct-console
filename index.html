@@ -226,12 +226,10 @@ button.danger{border-color:#ff3b3b}
 </main>
 
 <script type="module">
-/* ───────────────── Firebase SDKs ───────────────── */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getDatabase, ref, child, get, onValue, update, set } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getDatabase, ref, child, get, onValue, update } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
-/* ───────────────── Config ───────────────── */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
   authDomain: "self-destruct-console.firebaseapp.com",
@@ -242,215 +240,208 @@ const firebaseConfig = {
   appId: "1:669939099742:web:310269ae940dd68a84accf"
 };
 
-/* ───────────────── DOM helpers / alerts (HARDENED) ───────────────── */
+/* ---------- tiny helpers ---------- */
 const $ = s => document.querySelector(s);
-function ensureAlertDOM(){
-  if(!document.getElementById('globalAlert')){
-    const d=document.createElement('div');
-    d.id='globalAlert';
-    d.style.cssText='position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,.92)';
-    d.innerHTML = `<div style="text-align:center;text-transform:uppercase;letter-spacing:.18em;color:#ff8080;font-weight:900">
-                     <div id="alarmMain" style="font-size:clamp(28px,7vw,120px);text-shadow:0 0 24px #f22">ALERT</div>
-                     <div id="alarmSub" style="margin-top:8px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3"></div>
-                   </div>`;
+const now = () => Date.now();
+const pad2 = n => String(n).padStart(2,'0');
+const fmt  = ms => { if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+
+/* ---------- inject css for bricked mode ---------- */
+(function(){
+  const css = `
+    body.bricked header, body.bricked main { filter: blur(1px) grayscale(.5) brightness(.7); pointer-events:none; user-select:none; }
+    #globalAlert{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;
+      background: radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.15), transparent),
+                  radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
+                  rgba(10,0,0,.92)}
+    #globalAlert .m{color:#ff8080;font-weight:900;text-transform:uppercase;letter-spacing:.18em;text-align:center}
+    #globalAlert .t1{font-size:clamp(28px,7vw,120px);text-shadow:0 0 20px #f22}
+    #globalAlert .t2{margin-top:10px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3}
+    #topBanner{position:fixed;left:0;right:0;top:0;display:none;z-index:9999;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
+  `;
+  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+})();
+
+/* ---------- robust alert DOM (auto-recreates if deleted) ---------- */
+function ensureAlert(){
+  if(!$('#globalAlert')){
+    const d=document.createElement('div'); d.id='globalAlert';
+    d.innerHTML = `<div class="m"><div id="alarmMain" class="t1">ALERT</div><div id="alarmSub" class="t2"></div></div>`;
     document.body.appendChild(d);
   }
-  if(!document.getElementById('topBanner')){
-    const b=document.createElement('div');
-    b.id='topBanner';
-    b.style.cssText='position:fixed;left:0;right:0;top:0;display:none;z-index:9998;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase';
-    b.textContent='ALERT';
-    document.body.prepend(b);
+  if(!$('#topBanner')){
+    const b=document.createElement('div'); b.id='topBanner'; b.textContent='ALERT'; document.body.prepend(b);
   }
 }
-function showAlarm(main, sub){
-  ensureAlertDOM();
-  $('#alarmMain').textContent = main || 'ALERT';
-  $('#alarmSub').textContent  = sub || '';
-  $('#globalAlert').style.display = 'flex';
+ensureAlert();
+let mustShow = false, currentKind = 'none';
+function brickUI(on){
+  const hdr=$('header'), main=$('main');
+  document.body.classList.toggle('bricked', on);
+  [hdr,main].forEach(el=>{ if(!el) return; if(on){ el.setAttribute('inert',''); el.querySelectorAll('input,button,select,textarea').forEach(x=>{ x.setAttribute('disabled','true'); x.setAttribute('tabindex','-1'); x.setAttribute('aria-disabled','true'); }); }
+                               else { el.removeAttribute('inert'); el.querySelectorAll('input[disabled],button[disabled],select[disabled],textarea[disabled]').forEach(x=>{ x.removeAttribute('disabled'); x.removeAttribute('tabindex'); x.removeAttribute('aria-disabled'); }); } });
 }
-function hideAlarm(){ ensureAlertDOM(); $('#globalAlert').style.display='none'; }
-function showBanner(text){ ensureAlertDOM(); const b=$('#topBanner'); b.textContent=text; b.style.display='block'; }
-function hideBanner(){ ensureAlertDOM(); $('#topBanner').style.display='none'; }
+function showAlert(kind, main, sub){
+  ensureAlert(); mustShow=true; currentKind=kind||'generic';
+  $('#alarmMain').textContent = main || 'ALERT';
+  $('#alarmSub').textContent  = sub  || '';
+  $('#globalAlert').style.display='flex';
+  $('#topBanner').textContent = main || 'ALERT';
+  $('#topBanner').style.display='block';
+  brickUI(true);
+}
+function clearAlert(){
+  ensureAlert(); mustShow=false; currentKind='none';
+  $('#globalAlert').style.display='none';
+  $('#topBanner').style.display='none';
+  brickUI(false);
+}
+/* watchdog: if someone deletes overlay while should be shown, recreate it instantly */
+new MutationObserver(()=>{ if(mustShow && !$('#globalAlert')) { ensureAlert(); showAlert(currentKind, $('#alarmMain')?.textContent||'ALERT', $('#alarmSub')?.textContent||''); } })
+  .observe(document.body,{childList:true,subtree:false});
 
-/* ───────────────── Local state ───────────────── */
-const now = ()=>Date.now();
-const pad2 = n=>String(n).padStart(2,'0');
-const fmt  = ms=>{ if(ms<0) ms=0; const t=Math.floor(ms/1000), h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+/* ---------- state for orchestrator ---------- */
+let app, db, auth, root, cfgRef, secRef;
+let connected=false, authed=false, bootOK=false, accessDenied=false;
+let DEBUG_FLAG=true;
+let lockoutUntil=0, lockoutReason='';
 
-let app, db, auth;
-let root, cfgRef, secRef;
-let myUid=null, operatorUid=null;
-let ONLINE=false, DEBUG_FLAG=true;
-let lockoutUntil=0;
-
-let state = {
-  status:'IDLE', since:0, startAt:null, durationMs:0, armedAt:null,
-  controlKeyHash:null, logPublic:[]
-};
-
-/* ───────────────── Minimal UI refs ───────────────── */
-const statusPill = $('#statusPill');
-const sinceEl    = $('#since');
-const timeLeftEl = $('#timeLeft');
-const barFill    = $('#barFill');
-const infoEl     = $('#countdownInfo');
-const logEl      = $('#log');
-
-/* ───────────────── Render ───────────────── */
+/* ---------- UI (public countdown bits) ---------- */
+const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
+let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
 function render(){
-  const s = state.status || 'IDLE';
+  const s=publicState.status||'IDLE';
   if(statusPill){ statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); }
-  if(sinceEl) sinceEl.textContent = state.since ? new Date(state.since).toLocaleString() : '–';
-
+  if(sinceEl) sinceEl.textContent = publicState.since ? new Date(publicState.since).toLocaleString() : '–';
   if(s==='COUNTDOWN'){
-    const left=(state.startAt||0)+(state.durationMs||0)-now();
-    if(timeLeftEl) { timeLeftEl.textContent = fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); }
-    if(barFill && state.durationMs>0){ barFill.style.width = Math.max(0,Math.min(100, Math.round(100*(1-left/state.durationMs))))+'%'; }
-    if(infoEl) infoEl.textContent = `${Math.floor((state.durationMs||0)/60000)}m ${pad2(Math.floor((state.durationMs||0)/1000)%60)}s from ${new Date(state.startAt||0).toLocaleTimeString()}`;
+    const left=(publicState.startAt||0)+(publicState.durationMs||0)-now();
+    if(timeLeftEl){ timeLeftEl.textContent=fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); }
+    if(barFill && publicState.durationMs>0){ barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/publicState.durationMs))))+'%'; }
+    if(infoEl) infoEl.textContent=`${Math.floor((publicState.durationMs||0)/60000)}m ${pad2(Math.floor((publicState.durationMs||0)/1000)%60)}s from ${new Date(publicState.startAt||0).toLocaleTimeString()}`;
   }else if(s==='ARMED'){
-    if(timeLeftEl) { timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); }
+    if(timeLeftEl){ timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); }
     if(barFill) barFill.style.width='0%';
     if(infoEl) infoEl.textContent='Awaiting MARK';
   }else if(s==='DETONATED'){
-    if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
+    if(timeLeftEl){ timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
     if(barFill) barFill.style.width='100%';
   }else{
-    if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
+    if(timeLeftEl){ timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
     if(barFill) barFill.style.width='0%';
     if(infoEl) infoEl.textContent='—';
   }
-  if(logEl) logEl.innerHTML = (state.logPublic||[]).slice().reverse().join('\n');
+  if(logEl) logEl.innerHTML=(publicState.logPublic||[]).slice().reverse().join('\n');
 }
 
-/* ───────────────── Online/Offline gates ───────────────── */
-function setOnline(ok, msg){
-  ONLINE = !!ok;
-  if(!ok){
-    showAlarm('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', msg || 'Firebase unreachable · controls disabled');
-    showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE');
-  }else{
-    hideBanner();
-    if(lockoutUntil && now()<lockoutUntil){
-      const secs = Math.max(0, Math.ceil((lockoutUntil-now())/1000));
-      showAlarm('TERMINAL LOCKOUT', `Security cooldown · ${secs}s remaining`);
-    }else{
-      hideAlarm();
-    }
+/* ---------- alert orchestrator (single source of truth) ---------- */
+function recomputeAlert(){
+  if(lockoutUntil && now()<lockoutUntil){
+    const secs=Math.max(0,Math.ceil((lockoutUntil-now())/1000));
+    showAlert('lockout','TERMINAL LOCKOUT',`${lockoutReason||'Security cooldown'} · ${secs}s remaining`);
+    return;
   }
+  if(!connected){
+    showAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled');
+    return;
+  }
+  if(!authed){
+    showAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Authentication pending/failed');
+    return;
+  }
+  if(!bootOK && accessDenied){
+    showAlert('access','ACCESS DENIED — NOT OPERATOR','Waiting for operator provisioning');
+    return;
+  }
+  clearAlert();
 }
 
-/* ───────────────── Crypto ───────────────── */
-async function sha256(str){
-  const enc=new TextEncoder().encode(str);
-  const buf=await crypto.subtle.digest('SHA-256', enc);
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-/* ───────────────── Bootstrap & listeners ───────────────── */
+/* ---------- init ---------- */
 (async function init(){
+  console.log('[LCARS] build v5.1.4-max-hotfix');
   try{
-    console.log('[LCARS] Loaded build: v5.1.4-max-hotfix; 2025-08-29 00:00Z');
-
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    await signInAnonymously(auth);
-
-    onAuthStateChanged(auth, u=>{ myUid = u?.uid || null; });
+    await signInAnonymously(auth).catch(e=>{ authed=false; throw e; });
+    onAuthStateChanged(auth, u=>{ authed=!!u; recomputeAlert(); });
 
     db = getDatabase(app);
-    root   = ref(db, 'selfDestruct');
-    cfgRef = child(root, 'config');
-    secRef = child(root, 'security');
+    root  = ref(db,'selfDestruct');
+    cfgRef= child(root,'config');
+    secRef= child(root,'security');
 
-    // Connection status
-    onValue(ref(db,'.info/connected'), s => setOnline(s.val()===true));
+    // connection
+    onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); recomputeAlert(); });
 
-    // Seed minimal keys if missing (status/since/logPublic/debug only: allowed in bootstrap)
-    try{
-      const r = await get(root);
-      if(!r.exists()){
-        await update(root, {
-          status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null,
-          logPublic:[], debug:true
-        });
-      }
-      const c = await get(cfgRef);
-      if(!c.exists()){
-        await update(cfgRef, { operatorUid: null });
-      }
-    }catch(seedingErr){
-      // If this fails, rules disallow bootstrap — user will still see ACCESS DENIED below
-      console.warn('[seed warning]', seedingErr);
-    }
-
-    // Live reads (public)
+    // public state
     onValue(root, snap=>{
       const v=snap.val()||{};
-      // Only copy public bits (others are operator-only)
-      state.status=v.status||'IDLE';
-      state.since=v.since||0;
-      state.startAt=v.startAt||null;
-      state.durationMs=v.durationMs||0;
-      state.armedAt=v.armedAt||null;
-      state.logPublic=Array.isArray(v.logPublic)?v.logPublic:[];
-      DEBUG_FLAG = !!v.debug;
+      publicState.status=v.status||'IDLE';
+      publicState.since=v.since||0;
+      publicState.startAt=v.startAt||null;
+      publicState.durationMs=v.durationMs||0;
+      publicState.armedAt=v.armedAt||null;
+      publicState.logPublic=Array.isArray(v.logPublic)?v.logPublic:[];
+      DEBUG_FLAG=!!v.debug;
+      bootOK=true; // we can read
       render();
+      recomputeAlert();
+    }, err=>{
+      // read failed → likely rules misconfigured, but viewers still OK for public keys
+      console.warn('[root read error]',err);
     });
 
-    // Lockout channel
+    // try to seed minimal shape (allowed during bootstrap); ignore failures
+    try{
+      const s = await get(root);
+      if(!s.exists()){
+        await update(root,{status:'IDLE',since:Date.now(),startAt:null,durationMs:0,armedAt:null,logPublic:[],debug:true});
+      }
+      const c = await get(cfgRef);
+      if(!c.exists()){ await update(cfgRef,{operatorUid:null}); }
+      bootOK=true;
+    }catch(e){
+      // If this throws Permission denied, we’re in accessDenied state until operator exists
+      if(String(e).includes('Permission denied')){ accessDenied=true; bootOK=false; }
+    }
+    recomputeAlert();
+
+    // security channel
     onValue(secRef, snap=>{
-      const s=snap.val()||{};
-      lockoutUntil = s.lockoutUntil||0;
-      if(now()<lockoutUntil) showAlarm('TERMINAL LOCKOUT', `Security cooldown · ${Math.ceil((lockoutUntil-now())/1000)}s remaining`);
-      else if(ONLINE) hideAlarm();
+      const v=snap.val()||{};
+      lockoutUntil=v.lockoutUntil||0; lockoutReason=v.lockoutReason||'LOCKOUT';
+      recomputeAlert();
     });
-
-    // Config (operator only). Errors are fine for viewers.
-    get(cfgRef).then(s=>{
-      const v=s.val()||{};
-      operatorUid = v.operatorUid ?? null;
-    }).catch(()=>{ /* ignore for viewers */ });
 
   }catch(err){
-    console.error('[Firebase error]', err);
-    const msg = String(err && (err.message||err));
-    if(msg.includes('Permission denied') || msg.includes('PERMISSION_DENIED')){
-      // We are online but blocked by rules (likely not operator yet)
-      setOnline(true);
-      showBanner('ACCESS DENIED — NOT OPERATOR');
-    }else{
-      setOnline(false, 'FIREBASE ERROR — OFFLINE');
-    }
+    console.error('[Firebase init error]', err);
+    // if we got here at all, we’re likely offline
+    connected=false; authed=false; bootOK=false;
+    recomputeAlert();
   }
 })();
 
-/* ───────────────── DevTools lockout (disabled while debug=true) ───────────────── */
+/* ---------- DevTools lockout (disabled when debug=true) ---------- */
 let dtStrikes=0, dtTimer=null;
-const devtoolsOpenLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
+const devtoolsLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
 function enterLockout(reason){
-  const ttl = 5*60*1000;
-  const until = now()+ttl;
-  lockoutUntil = until;
-  showAlarm('TERMINAL LOCKOUT', `${reason || 'Security cooldown'} · ${Math.ceil(ttl/1000)}s`);
-  // fire-and-forget: any signed-in can write under /security
-  if(secRef) update(secRef, { lockoutUntil: until, lockoutReason: reason||'LOCKOUT' }).catch(()=>{});
+  lockoutReason = reason || 'Security cooldown';
+  lockoutUntil = now()+5*60*1000;
+  recomputeAlert();
+  if(secRef) update(secRef,{lockoutUntil,lockoutReason}).catch(()=>{});
 }
-function checkDevtools(){
-  if(DEBUG_FLAG) return; // bypass in debug
-  if(devtoolsOpenLikely()){
+function checkDev(){
+  if(DEBUG_FLAG) return; // bypass in debug mode
+  if(devtoolsLikely()){
     dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000);
     if(dtStrikes>=2) enterLockout('Developer tools opened');
   }
 }
-setInterval(checkDevtools, 1200);
-window.addEventListener('resize', checkDevtools);
-window.addEventListener('keydown', e=>{
-  if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools();
+setInterval(checkDev,1200);
+window.addEventListener('resize',checkDev);
+window.addEventListener('keydown',e=>{
+  if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDev();
 });
 
-/* ───────────────── Timer tick ───────────────── */
-setInterval(()=>{
-  if(state.status==='COUNTDOWN') render();
-}, 250);
+/* ---------- soft render tick for countdown ---------- */
+setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 </script>
