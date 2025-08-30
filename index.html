@@ -226,12 +226,12 @@ button.danger{border-color:#ff3b3b}
 </main>
 
 <script type="module">
-/* ───────── Firebase ───────── */
+/* ───────────────── Firebase SDKs ───────────────── */
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getDatabase, ref, onValue, update, set, get, child } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getDatabase, ref, child, get, onValue, update, set } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
-/* ───────── Config (YOUR project) ───────── */
+/* ───────────────── Config ───────────────── */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
   authDomain: "self-destruct-console.firebaseapp.com",
@@ -242,258 +242,215 @@ const firebaseConfig = {
   appId: "1:669939099742:web:310269ae940dd68a84accf"
 };
 
-/* ───────── Utilities ───────── */
-const $=s=>document.querySelector(s);
-const now=()=>Date.now();
-const pad2=n=>String(n).padStart(2,'0');
-const fmt={
-  hhmmss(ms){ if(ms<0)ms=0; const t=Math.floor(ms/1000);
-    const h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;
-    return (h>0?pad2(h)+':':'')+pad2(m)+':'+pad2(s);},
-  when(ts){return ts?new Date(ts).toLocaleString(): '–';}
+/* ───────────────── DOM helpers / alerts (HARDENED) ───────────────── */
+const $ = s => document.querySelector(s);
+function ensureAlertDOM(){
+  if(!document.getElementById('globalAlert')){
+    const d=document.createElement('div');
+    d.id='globalAlert';
+    d.style.cssText='position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:9999;background:rgba(0,0,0,.92)';
+    d.innerHTML = `<div style="text-align:center;text-transform:uppercase;letter-spacing:.18em;color:#ff8080;font-weight:900">
+                     <div id="alarmMain" style="font-size:clamp(28px,7vw,120px);text-shadow:0 0 24px #f22">ALERT</div>
+                     <div id="alarmSub" style="margin-top:8px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3"></div>
+                   </div>`;
+    document.body.appendChild(d);
+  }
+  if(!document.getElementById('topBanner')){
+    const b=document.createElement('div');
+    b.id='topBanner';
+    b.style.cssText='position:fixed;left:0;right:0;top:0;display:none;z-index:9998;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase';
+    b.textContent='ALERT';
+    document.body.prepend(b);
+  }
+}
+function showAlarm(main, sub){
+  ensureAlertDOM();
+  $('#alarmMain').textContent = main || 'ALERT';
+  $('#alarmSub').textContent  = sub || '';
+  $('#globalAlert').style.display = 'flex';
+}
+function hideAlarm(){ ensureAlertDOM(); $('#globalAlert').style.display='none'; }
+function showBanner(text){ ensureAlertDOM(); const b=$('#topBanner'); b.textContent=text; b.style.display='block'; }
+function hideBanner(){ ensureAlertDOM(); $('#topBanner').style.display='none'; }
+
+/* ───────────────── Local state ───────────────── */
+const now = ()=>Date.now();
+const pad2 = n=>String(n).padStart(2,'0');
+const fmt  = ms=>{ if(ms<0) ms=0; const t=Math.floor(ms/1000), h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+
+let app, db, auth;
+let root, cfgRef, secRef;
+let myUid=null, operatorUid=null;
+let ONLINE=false, DEBUG_FLAG=true;
+let lockoutUntil=0;
+
+let state = {
+  status:'IDLE', since:0, startAt:null, durationMs:0, armedAt:null,
+  controlKeyHash:null, logPublic:[]
 };
-const norm=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 .'\-_]+/g,'').trim().replace(/\s+/g,' ');
-async function sha256(str){const enc=new TextEncoder().encode(str);const buf=await crypto.subtle.digest('SHA-256',enc);return[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('')}
-function genTokenHex(len=64){const b=new Uint8Array(len/2);crypto.getRandomValues(b);return[...b].map(x=>x.toString(16).padStart(2,'0')).join('')}
 
-/* ───────── Severity alerts ───────── */
-const ALERT_RANK={lockout:3,offline:2,warn:1}; let currentAlert=null;
-function showAlarm(main,sub){$('#alarmMain').textContent=main||'ALERT';$('#alarmSub').textContent=sub||'';$('#globalAlert').style.display='flex'}
-function hideAlarm(){ $('#globalAlert').style.display='none' }
-function queueToast(text){ const c=$("#cornerToasts"); const n=document.createElement('div'); n.className='toast'; n.textContent=text; c.appendChild(n); setTimeout(()=>n.remove(),6000) }
-function raiseAlert(kind,main,sub){ const rank=ALERT_RANK[kind]||1; if(!currentAlert||rank>=ALERT_RANK[currentAlert.kind]){ showAlarm(main,sub); currentAlert={kind,main,sub}; } else queueToast(main); }
-function clearAlert(kind){ if(currentAlert&&currentAlert.kind===kind){ hideAlarm(); currentAlert=null; } }
-function showBanner(txt){ const b=$("#topBanner"); b.textContent=txt||'ALERT'; b.style.display='block'}
-function hideBanner(){ $("#topBanner").style.display='none' }
+/* ───────────────── Minimal UI refs ───────────────── */
+const statusPill = $('#statusPill');
+const sinceEl    = $('#since');
+const timeLeftEl = $('#timeLeft');
+const barFill    = $('#barFill');
+const infoEl     = $('#countdownInfo');
+const logEl      = $('#log');
 
-/* ───────── Elements ───────── */
-const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), countdownInfoEl=$('#countdownInfo'), logEl=$('#log');
-const tabCountdown=$('#tabCountdown'), tabControl=$('#tabControl'); const vCountdown=$('#viewCountdown'), vControl=$('#viewControl');
-const gateOverlay=$('#gateOverlay'), gateLabel=$('#gateLabel');
-const btnSetPin=$('#btnSetPin'), btnUnlock=$('#btnUnlock'), btnSaveOfficers=$('#btnSaveOfficers'), btnArm=$('#btnArm'), btnDisarm=$('#btnDisarm'), btnStart=$('#btnStart'), btnAbort=$('#btnAbort'), btnReset=$('#btnReset');
-const officerSetupSection=$('#officerSetupSection'), officerLockedMsg=$('#officerLockedMsg');
-
-/* ───────── Tabs ───────── */
-function show(tab){
-  if(tab==='control'){ vControl.style.display='grid'; vCountdown.style.display='none'; tabControl.classList.add('active'); tabCountdown.classList.remove('active'); if(!unlocked) gateOverlay.style.display='flex'; }
-  else { vCountdown.style.display='grid'; vControl.style.display='none'; tabCountdown.classList.add('active'); tabControl.classList.remove('active'); gateOverlay.style.display='none'; }
-}
-tabCountdown.addEventListener('click',()=>show('countdown'));
-tabControl.addEventListener('click',()=>show('control'));
-
-/* ───────── WebAudio sounds (no files) ───────── */
-let audioEnabled=false,tickEnabled=true,audioCtx=null,klaxonNode=null;
-$('#btnToggleSound').addEventListener('click',()=>{ audioEnabled=!audioEnabled; if(audioEnabled&&!audioCtx){audioCtx=new (window.AudioContext||window.webkitAudioContext)()} $('#btnToggleSound').textContent=audioEnabled?'Disable Sound':'Enable Sound' });
-$('#chkTick').addEventListener('change',e=> tickEnabled=e.target.checked);
-
-function tone(freq=880,ms=120,gain=0.06,type='sine'){ if(!audioEnabled||!audioCtx)return; const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type=type;o.frequency.value=freq; g.gain.value=gain; o.connect(g).connect(audioCtx.destination); o.start(); setTimeout(()=>o.stop(),ms) }
-function chord(fs=[660,880,1100],ms=220,g=0.05){ if(!audioEnabled||!audioCtx)return; const gnode=audioCtx.createGain(); gnode.gain.value=g; gnode.connect(audioCtx.destination); fs.forEach(f=>{const o=audioCtx.createOscillator();o.frequency.value=f;o.type='sawtooth';o.connect(gnode);o.start();setTimeout(()=>o.stop(),ms)}); }
-function startKlaxon(kind){ stopKlaxon(); if(!audioEnabled||!audioCtx)return; klaxonNode=audioCtx.createOscillator(); klaxonNode.type='square'; const gg=audioCtx.createGain(); gg.gain.value=0.05; klaxonNode.connect(gg).connect(audioCtx.destination);
-  let up=true; const base= kind==='offline'? 300:470; const swing= kind==='offline'? 120:180;
-  klaxonNode.start(); const id=setInterval(()=>{ if(!klaxonNode){clearInterval(id);return} const f=base+(up?swing:0); klaxonNode.frequency.setValueAtTime(f,audioCtx.currentTime); up=!up; },600); klaxonNode.__timer=id; }
-function stopKlaxon(){ if(klaxonNode){ try{klaxonNode.stop()}catch{}; clearInterval(klaxonNode.__timer); klaxonNode.disconnect(); klaxonNode=null; } }
-const SFX={ uiBeep:()=>tone(900,60,0.045,'triangle'), uiConfirm:()=>chord([660,990,1320],170,0.06), lockout:()=>chord([120,240,180],400,0.08),
-             abort:()=>{tone(400,120,0.06,'sawtooth'); setTimeout(()=>tone(260,160,0.06,'sawtooth'),120)}, detonate:()=>chord([90,70,50],900,0.2),
-             tick:()=>tone(1200,30,0.03,'square') };
-
-/* ───────── App state ───────── */
-let state={status:'IDLE',since:now(),auth1:null,auth2:null,startAt:null,durationMs:0,armedAt:null,logPublic:[`[${new Date().toLocaleTimeString()}] Initialized`],controlKeyHash:null};
-let officers={locked:false,o1:{name:'',nameNorm:'',codeHash:''},o2:{name:'',nameNorm:'',codeHash:''}};
-let unlocked=false,ONLINE=false,myUid=null,operatorUid=null,isOperator=false,lockoutUntil=0,offlineVoiced=false,rekeyKeyHash='',DEBUG_FLAG=false,lockoutReason='Security cooldown active';
-
-/* ───────── Online/controls ───────── */
-function disableControls(dis){[btnSetPin,btnUnlock,btnSaveOfficers,btnArm,btnDisarm,btnStart,btnAbort,btnReset].forEach(el=>{if(el) el.disabled=!!dis})}
-function lockoutActive(){return now()<lockoutUntil}
-function setOnline(ok){
-  ONLINE=ok;
-  if(ok){
-    if(lockoutActive()) raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); else { hideBanner(); clearAlert('offline'); }
-    disableControls(false); offlineVoiced=false;
-  }else{
-    raiseAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled');
-    showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE');
-    disableControls(true);
-    if(!offlineVoiced){ speak('Warning. Self destruct system damaged. Firebase offline.'); offlineVoiced=true; }
-  }
-  updateAlarmForState(); setControlState();
-}
-function lockoutSubText(){const left=Math.max(0,lockoutUntil-now()); return `Reason: ${lockoutReason} · Time left ${fmt.hhmmss(left)}`}
-
-/* ───────── Voice ───────── */
-function speak(text){ if(!audioEnabled)return; const u=new SpeechSynthesisUtterance(text); u.rate=1; u.pitch=1; const vs=speechSynthesis.getVoices(); const pref=vs.find(v=>/en-GB|en-US/i.test(v.lang))||vs[0]; if(pref)u.voice=pref; speechSynthesis.speak(u)}
-
-/* ───────── Render ───────── */
+/* ───────────────── Render ───────────────── */
 function render(){
-  const s=state.status;
-  statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase();
-  sinceEl.textContent=fmt.when(state.since);
-  if(s==='COUNTDOWN'){ const T0=state.startAt||0, dur=state.durationMs||0, left=T0+dur-now();
-    timeLeftEl.textContent=fmt.hhmmss(left);
-    barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/dur))))+'%';
-    countdownInfoEl.textContent=`${Math.floor(dur/60000)}m ${pad2(Math.floor(dur/1000)%60)}s from ${new Date(T0).toLocaleTimeString()}`;
-    timeLeftEl.classList.toggle('flash', left<=30000);
-  } else if(s==='ARMED'){
-    timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; countdownInfoEl.textContent='Awaiting MARK';
-  } else if(s==='DETONATED'){
-    timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); barFill.style.width='100%';
-  } else {
-    timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; countdownInfoEl.textContent='—';
+  const s = state.status || 'IDLE';
+  if(statusPill){ statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); }
+  if(sinceEl) sinceEl.textContent = state.since ? new Date(state.since).toLocaleString() : '–';
+
+  if(s==='COUNTDOWN'){
+    const left=(state.startAt||0)+(state.durationMs||0)-now();
+    if(timeLeftEl) { timeLeftEl.textContent = fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); }
+    if(barFill && state.durationMs>0){ barFill.style.width = Math.max(0,Math.min(100, Math.round(100*(1-left/state.durationMs))))+'%'; }
+    if(infoEl) infoEl.textContent = `${Math.floor((state.durationMs||0)/60000)}m ${pad2(Math.floor((state.durationMs||0)/1000)%60)}s from ${new Date(state.startAt||0).toLocaleTimeString()}`;
+  }else if(s==='ARMED'){
+    if(timeLeftEl) { timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); }
+    if(barFill) barFill.style.width='0%';
+    if(infoEl) infoEl.textContent='Awaiting MARK';
+  }else if(s==='DETONATED'){
+    if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
+    if(barFill) barFill.style.width='100%';
+  }else{
+    if(timeLeftEl) { timeLeftEl.textContent='00:00'; timeLeftEl.classList.remove('flash'); }
+    if(barFill) barFill.style.width='0%';
+    if(infoEl) infoEl.textContent='—';
   }
-  logEl.innerHTML=(state.logPublic||[]).slice().reverse().join('\n');
-  updateAlarmForState();
+  if(logEl) logEl.innerHTML = (state.logPublic||[]).slice().reverse().join('\n');
 }
-function updateAlarmForState(){ if(!ONLINE){ startKlaxon('offline'); return } stopKlaxon(); if(state.status==='ARMED'||state.status==='COUNTDOWN'){ startKlaxon('normal') }}
 
-/* ───────── Tamper & DevTools ───────── */
-let tamperStrikes=0,tamperTimer=null,mo;
-const protectedSet=new Set([$('#statusPill'),$('#timeLeft')].filter(Boolean));
-function attachGuard(){ if(mo)try{mo.disconnect()}catch{}; mo=new MutationObserver(muts=>{ for(const m of muts){ if(m.type!=='characterData')continue; const host=m.target&&m.target.parentNode; if(host&&protectedSet.has(host)){ appendLog('SECURITY: Tamper detected — DOM mutation in protected elements'); clearTimeout(tamperTimer); tamperStrikes++; tamperTimer=setTimeout(()=>tamperStrikes=0,5000); if(tamperStrikes>=3) enterLockout('UNAUTHORIZED CHANGE ATTEMPT DETECTED'); break; } } }); protectedSet.forEach(n=> mo.observe(n,{characterData:true,subtree:true})) }
-const qs=new URLSearchParams(location.search);
-const MAINT = qs.has('maint') || qs.has('debug');
-function devtoolsLikelyOpen(){ const T=140; const w=window.outerWidth-window.innerWidth; const h=window.outerHeight-window.innerHeight; return (w>T||h>T) }
-function checkDevtools(){ if(MAINT||DEBUG_FLAG) return; if(devtoolsLikelyOpen()) enterLockout('DEVELOPER TOOLS OPENED') }
-setInterval(checkDevtools,1200);
-window.addEventListener('resize',checkDevtools);
-window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools(); });
+/* ───────────────── Online/Offline gates ───────────────── */
+function setOnline(ok, msg){
+  ONLINE = !!ok;
+  if(!ok){
+    showAlarm('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE', msg || 'Firebase unreachable · controls disabled');
+    showBanner('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE');
+  }else{
+    hideBanner();
+    if(lockoutUntil && now()<lockoutUntil){
+      const secs = Math.max(0, Math.ceil((lockoutUntil-now())/1000));
+      showAlarm('TERMINAL LOCKOUT', `Security cooldown · ${secs}s remaining`);
+    }else{
+      hideAlarm();
+    }
+  }
+}
 
-/* ───────── Timer / TTS countdown ───────── */
-let lastSpokenSec=null;
-setInterval(()=>{ if(state.status!=='COUNTDOWN')return; const left=(state.startAt||0)+(state.durationMs||0)-now(); const sec=Math.ceil(left/1000);
-  if(tickEnabled && audioEnabled) SFX.tick();
-  if(audioEnabled && sec<=5 && sec>0 && sec!==lastSpokenSec){ lastSpokenSec=sec; speak(String(sec)) }
-  if(left<=0 && state.status!=='DETONATED'){ setStatus('DETONATED'); appendLog('*** DETONATION ***'); SFX.detonate(); speak('Auto destruct complete. Goodbye.'); stopKlaxon(); }
-  setControlState();
-},1000);
+/* ───────────────── Crypto ───────────────── */
+async function sha256(str){
+  const enc=new TextEncoder().encode(str);
+  const buf=await crypto.subtle.digest('SHA-256', enc);
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 
-/* ───────── Firebase boot ───────── */
-let app,db,root,cfgRef,securityRef,auth;
+/* ───────────────── Bootstrap & listeners ───────────────── */
 (async function init(){
   try{
-    app=initializeApp(firebaseConfig);
-    auth=getAuth(app);
-    try{ await signInAnonymously(auth); }
-    catch(err){ showBanner('AUTH ERROR — OFFLINE'); raiseAlert('offline','AUTH ERROR','Enable Anonymous Auth'); disableControls(true); console.error(err); return; }
-    onAuthStateChanged(auth, async (user)=>{ if(!user){ raiseAlert('offline','AUTH ERROR','Anonymous auth missing'); return } myUid=user.uid; appendLog(`NOTICE: This device UID: ${myUid}`); setControlState(); });
+    console.log('[LCARS] Loaded build: v5.1.4-max-hotfix; 2025-08-29 00:00Z');
 
-    db=getDatabase(app); root=ref(db,'selfDestruct'); cfgRef=ref(db,'selfDestruct/config'); securityRef=ref(db,'selfDestruct/security');
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    await signInAnonymously(auth);
 
-    const rs=await get(root); if(!rs.exists()) await update(root,state);
-    const cs=await get(cfgRef); if(cs.exists()){ const v=cs.val()||{}; officers=v.officers||officers; operatorUid=v.operatorUid||null; rekeyKeyHash=v.rekeyKeyHash||''; } else { await set(cfgRef,{officers,operatorUid:null,rekeyKeyHash:''}) }
+    onAuthStateChanged(auth, u=>{ myUid = u?.uid || null; });
 
-    onValue(root,snap=>{ const v=snap.val()||{}; state={...state,...v}; render(); setControlState(); });
-    onValue(cfgRef,snap=>{ const v=snap.val()||{}; if(v.officers) officers=v.officers; if('operatorUid' in v) operatorUid=v.operatorUid; if('rekeyKeyHash' in v) rekeyKeyHash=v.rekeyKeyHash; updateOfficerUI(); setControlState(); });
-    onValue(securityRef,snap=>{ const v=snap.val()||{}; lockoutUntil=v.lockoutUntil||0; if(v.lockoutReason) lockoutReason=v.lockoutReason;
-      if(lockoutActive()){ raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); SFX.lockout(); } else if(ONLINE) clearAlert('lockout'); setControlState(); });
-    onValue(ref(db,'.info/connected'), s=> setOnline(s.val()===true));
-    onValue(ref(db,'selfDestruct/debug'), s=> { DEBUG_FLAG=!!s.val(); if(DEBUG_FLAG) queueToast('DEBUG MODE ACTIVE') });
+    db = getDatabase(app);
+    root   = ref(db, 'selfDestruct');
+    cfgRef = child(root, 'config');
+    secRef = child(root, 'security');
 
-    setOnline(true);
-    setTimeout(attachGuard, 1200);
-    console.log('[LCARS] Loaded build: v5.2; '+new Date().toISOString());
+    // Connection status
+    onValue(ref(db,'.info/connected'), s => setOnline(s.val()===true));
+
+    // Seed minimal keys if missing (status/since/logPublic/debug only: allowed in bootstrap)
+    try{
+      const r = await get(root);
+      if(!r.exists()){
+        await update(root, {
+          status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null,
+          logPublic:[], debug:true
+        });
+      }
+      const c = await get(cfgRef);
+      if(!c.exists()){
+        await update(cfgRef, { operatorUid: null });
+      }
+    }catch(seedingErr){
+      // If this fails, rules disallow bootstrap — user will still see ACCESS DENIED below
+      console.warn('[seed warning]', seedingErr);
+    }
+
+    // Live reads (public)
+    onValue(root, snap=>{
+      const v=snap.val()||{};
+      // Only copy public bits (others are operator-only)
+      state.status=v.status||'IDLE';
+      state.since=v.since||0;
+      state.startAt=v.startAt||null;
+      state.durationMs=v.durationMs||0;
+      state.armedAt=v.armedAt||null;
+      state.logPublic=Array.isArray(v.logPublic)?v.logPublic:[];
+      DEBUG_FLAG = !!v.debug;
+      render();
+    });
+
+    // Lockout channel
+    onValue(secRef, snap=>{
+      const s=snap.val()||{};
+      lockoutUntil = s.lockoutUntil||0;
+      if(now()<lockoutUntil) showAlarm('TERMINAL LOCKOUT', `Security cooldown · ${Math.ceil((lockoutUntil-now())/1000)}s remaining`);
+      else if(ONLINE) hideAlarm();
+    });
+
+    // Config (operator only). Errors are fine for viewers.
+    get(cfgRef).then(s=>{
+      const v=s.val()||{};
+      operatorUid = v.operatorUid ?? null;
+    }).catch(()=>{ /* ignore for viewers */ });
+
   }catch(err){
-    console.error('[Firebase error]',err);
-    const msg=String(err && (err.message||err));
-    if(msg.includes('PERMISSION_DENIED')){ showBanner('ACCESS DENIED — NOT OPERATOR'); setOnline(true); queueToast('Access denied'); }
-    else setOnline(false);
+    console.error('[Firebase error]', err);
+    const msg = String(err && (err.message||err));
+    if(msg.includes('Permission denied') || msg.includes('PERMISSION_DENIED')){
+      // We are online but blocked by rules (likely not operator yet)
+      setOnline(true);
+      showBanner('ACCESS DENIED — NOT OPERATOR');
+    }else{
+      setOnline(false, 'FIREBASE ERROR — OFFLINE');
+    }
   }
 })();
 
-/* ───────── DB helpers ───────── */
-function assertOnline(){ if(!ONLINE) throw new Error('OFFLINE'); if(lockoutActive()) throw new Error('LOCKOUT'); if(!isOperator) throw new Error('NOT_OPERATOR') }
-async function write(patch){ assertOnline(); return update(root,patch) }
-async function writeCfg(patch){ return update(cfgRef,patch) }
-async function writeSec(patch){ try{return update(securityRef,patch)}catch{} }
-async function appendLog(line){ try{ const e=`[${new Date().toLocaleTimeString()}] ${line}`; const lp=(state.logPublic||[]).slice(-99).concat(e); state.logPublic=lp; await update(root,{logPublic:lp}); }catch{} }
-function setStatus(s){ try{ assertOnline(); return update(root,{status:s,since:now()}) }catch{ return } }
-
-/* ───────── Lockout ───────── */
-async function enterLockout(reason){ lockoutUntil=now()+5*60*1000; lockoutReason=reason||'Security cooldown active';
-  try{ await update(securityRef,{lockoutUntil,lockoutReason,lastUid:myUid||'unknown'}) }catch{}
-  raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); SFX.lockout(); speak('Security alert. Terminal lockout engaged.'); setControlState();
+/* ───────────────── DevTools lockout (disabled while debug=true) ───────────────── */
+let dtStrikes=0, dtTimer=null;
+const devtoolsOpenLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
+function enterLockout(reason){
+  const ttl = 5*60*1000;
+  const until = now()+ttl;
+  lockoutUntil = until;
+  showAlarm('TERMINAL LOCKOUT', `${reason || 'Security cooldown'} · ${Math.ceil(ttl/1000)}s`);
+  // fire-and-forget: any signed-in can write under /security
+  if(secRef) update(secRef, { lockoutUntil: until, lockoutReason: reason||'LOCKOUT' }).catch(()=>{});
 }
-
-/* ───────── Operator gate & UI ───────── */
-function setControlState(){
-  isOperator=!!(myUid && operatorUid && myUid===operatorUid);
-  const left=(state.startAt||0)+(state.durationMs||0)-now();
-  const opBlock=!isOperator;
-  btnArm.disabled = opBlock||!ONLINE||!unlocked||state.status!=='IDLE';
-  btnDisarm.disabled = opBlock||!ONLINE||!unlocked||state.status!=='ARMED';
-  btnStart.disabled = opBlock||!ONLINE||!unlocked||state.status!=='ARMED';
-  btnAbort.disabled = opBlock||!ONLINE||!unlocked||state.status!=='COUNTDOWN'||left<=15000;
-  btnReset.disabled = opBlock||!ONLINE||!unlocked||!(['ABORTED','DETONATED'].includes(state.status));
-  btnSaveOfficers.disabled = opBlock||!ONLINE||!unlocked||officersAreLocked();
-
-  $('#uidVal').textContent=myUid||'—';
-  $('#opStatus').textContent=isOperator?'OPERATOR DEVICE':'VIEWER DEVICE';
+function checkDevtools(){
+  if(DEBUG_FLAG) return; // bypass in debug
+  if(devtoolsOpenLikely()){
+    dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000);
+    if(dtStrikes>=2) enterLockout('Developer tools opened');
+  }
 }
-function refreshPinUI(){ btnSetPin.style.display = state.controlKeyHash? 'none':'inline-block' }
-function officersAreLocked(){ return !!(officers && officers.locked && officers.o1?.codeHash && officers.o2?.codeHash) }
-function updateOfficerUI(){ if(officersAreLocked()){ officerSetupSection.style.display='none'; officerLockedMsg.style.display='block'; } else { officerSetupSection.style.display='block'; officerLockedMsg.style.display='none'; } }
+setInterval(checkDevtools, 1200);
+window.addEventListener('resize', checkDevtools);
+window.addEventListener('keydown', e=>{
+  if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDevtools();
+});
 
-/* Operator actions */
-$('#btnCopyUid').addEventListener('click',async()=>{ try{await navigator.clipboard.writeText(myUid||''); queueToast('UID copied')}catch{} });
-$('#btnSetAsOperator').addEventListener('click',async()=>{ if(!myUid) return alert('No UID yet');
-  const curSnap=await get(child(cfgRef,'operatorUid')); const cur=curSnap.exists()?curSnap.val():null;
-  if(cur && cur!==myUid) return alert('Operator already set to another device.');
-  await writeCfg({operatorUid:myUid}); operatorUid=myUid; await appendLog('Operator UID set to current device.'); setControlState(); alert('This device registered as OPERATOR.') });
-$('#btnResetOperator').addEventListener('click',async()=>{ try{ if(!isOperator) return alert('Only current operator can reset.'); if(!unlocked) return alert('Unlock CONTROL first.');
-  if(!confirm('Reset operator to null? Next device can claim operator.')) return;
-  const pin=prompt('Enter Operator PIN to confirm reset'); if(!pin) return; if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
-  await writeCfg({operatorUid:null}); operatorUid=null; await appendLog('Operator reset to null by current operator.'); setControlState(); alert('Operator reset.') }catch(e){alert('Reset failed.')} });
-
-/* Recovery */
-$('#btnGenToken').addEventListener('click',async()=>{ const t=genTokenHex(64); $('#rkToken').value=t; try{await navigator.clipboard.writeText(t); alert('Recovery token generated & copied')}catch{alert('Token generated. Copy it now.')}})
-$('#btnSetRecovery').addEventListener('click',async()=>{ if(!isOperator||!unlocked) return alert('Unlock + operator required'); const pin=$('#rkPin').value.trim(), tok=$('#rkToken').value.trim(); if(!pin||!tok) return alert('Enter PIN and token');
-  if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN'); const h=await sha256(tok); await writeCfg({rekeyKeyHash:h}); await appendLog('Recovery token rotated.'); queueToast('Recovery token set') })
-$('#btnRekey').addEventListener('click',async()=>{ if(!isOperator||!unlocked) return alert('Unlock + operator required'); const pin=$('#rkPin').value.trim(), tok=$('#rkToken').value.trim();
-  if(!pin||!tok) return alert('Enter PIN and token'); if(await sha256(pin)!==state.controlKeyHash) return alert('Wrong operator PIN');
-  const h=await sha256(tok); if(!rekeyKeyHash || h!==rekeyKeyHash) return alert('Bad recovery token');
-  await update(cfgRef,{officers:null,rekeyKeyHash:''}); officers={locked:false,o1:{},o2:{}}; updateOfficerUI(); await appendLog('BREAK-GLASS: Officers cleared for re-enrollment.'); speak('Break glass authorized. Officers cleared.') })
-
-/* PIN / Unlock */
-btnSetPin.addEventListener('click',async()=>{ try{ if(state.controlKeyHash) return alert('PIN already set.'); const pin=$('#pin').value.trim(); if(!pin) return alert('Enter a PIN first.');
-  await write({controlKeyHash: await sha256(pin)}); await appendLog('Operator PIN set.'); speak('Operator PIN set.'); refreshPinUI(); SFX.uiConfirm(); }catch(e){ alert('Denied') } })
-btnUnlock.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE) return alert('System offline.');
-  const pin=$('#pin').value.trim(); if(!pin) return; if(!state.controlKeyHash) return alert('No PIN set yet.');
-  if(await sha256(pin)!==state.controlKeyHash){ await fail('unlock'); gateLabel.textContent='ACCESS DENIED'; gateLabel.style.color='#ff9b9b'; tone(240,120,0.08,'sawtooth'); return; }
-  unlocked=true; gateLabel.textContent='ACCESS GRANTED'; gateLabel.style.color='#2be4a1'; gateOverlay.style.display='none'; setControlState(); speak('Access granted.'); SFX.uiConfirm();
-  const ua=(navigator.userAgent||'')+'|'+(navigator.platform||''); const uah=await sha256(ua); const last=(await get(child(securityRef,'lastOperatorUAHash'))).val()||''; if(uah!==last){ await writeSec({lastOperatorUAHash: uah}); await appendLog('SECURITY: New device used to unlock CONTROL'); queueToast('New device notice') } })
-
-/* Officers */
-btnSaveOfficers.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText());
-  try{ if(!unlocked) return alert('Unlock CONTROL first'); if(officersAreLocked()) return alert('Officers already set.');
-    const n1=$('#setupO1Name').value.trim(), p1=$('#setupO1Pin').value.trim(), n2=$('#setupO2Name').value.trim(), p2=$('#setupO2Pin').value.trim(); if(!n1||!p1||!n2||!p2) return alert('Enter both names and pins.');
-    officers={locked:true,o1:{name:n1,nameNorm:norm(n1),codeHash:await sha256(p1)},o2:{name:n2,nameNorm:norm(n2),codeHash:await sha256(p2)}}; await writeCfg({officers}); updateOfficerUI(); await appendLog('Officers set.'); SFX.uiConfirm(); speak('Officer credentials stored.') }
-  catch(e){ await appendLog('SECURITY: Non-operator attempted to modify config') } })
-
-/* Controls */
-btnArm.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='IDLE') return; if(!officersAreLocked()) return alert('Set officers first.');
-  const n1=norm($('#verifyO1Name').value), p1=$('#verifyO1Pin').value.trim(), n2=norm($('#verifyO2Name').value), p2=$('#verifyO2Pin').value.trim(); if(!n1||!n2||!p1||!p2) return alert('Enter both names and pins.');
-  const ok1=(n1===officers.o1.nameNorm)&&(await sha256(p1)===officers.o1.codeHash); const ok2=(n2===officers.o2.nameNorm)&&(await sha256(p2)===officers.o2.codeHash);
-  const okAlt1=(n1===officers.o2.nameNorm)&&(await sha256(p1)===officers.o2.codeHash); const okAlt2=(n2===officers.o1.nameNorm)&&(await sha256(p2)===officers.o1.codeHash);
-  if(!((ok1&&ok2)||(okAlt1&&okAlt2))) { await fail('verify'); return alert('Verification failed.') }
-  await write({auth1:{at:now()},auth2:{at:now()},armedAt:now()}); await setStatus('ARMED'); await appendLog('Armed by two officers.');
-  speak('Computer. Authorization one confirmed.'); setTimeout(()=>speak('Identity confirmed. Additional authorization required.'),1200); setTimeout(()=>speak('Computer. Authorization two confirmed.'),3200); setTimeout(()=>speak('Identity confirmed. Auto destruct sequence armed.'),4800);
-  updateAlarmForState();
-})
-btnDisarm.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked) return;
-  await write({auth1:null,auth2:null,armedAt:null}); await setStatus('IDLE'); await appendLog('Disarmed.'); stopKlaxon(); SFX.uiConfirm(); speak('Auto destruct disarmed.') })
-btnStart.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='ARMED') return;
-  const m=Math.max(0,parseInt($('#mins').value||'0',10)); const s=Math.max(0,Math.min(59,parseInt($('#secs').value||'0',10))); const durationMs=(m*60+s)*1000; const startAt=now();
-  await write({startAt,durationMs}); await setStatus('COUNTDOWN'); await appendLog(`MARK — countdown started: ${m}m ${s}s.`); speak(`Set the countdown for ${m} minutes ${s} seconds from my mark. Mark.`); setTimeout(()=> speak(`Sequence initiated. Auto destruct in ${m} minutes ${s} seconds.`),1300); updateAlarmForState(); })
-btnAbort.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked||state.status!=='COUNTDOWN') return;
-  const left=(state.startAt||0)+(state.durationMs||0)-now(); if(left<=15000){ await appendLog('Abort rejected — inside T-15s.'); queueToast('Abort locked inside T-15s'); return; }
-  await setStatus('ABORTED'); await appendLog('*** ABORTED ***'); stopKlaxon(); SFX.abort(); speak('Auto destruct sequence aborted.'); })
-btnReset.addEventListener('click',async()=>{ if(lockoutActive()) return raiseAlert('lockout','TERMINAL LOCKOUT',lockoutSubText()); if(!ONLINE||!unlocked) return;
-  const newState={ status:'IDLE', since:now(), auth1:null, auth2:null, startAt:null, durationMs:0, armedAt:null, controlKeyHash: state.controlKeyHash||null, logPublic:[`[${new Date().toLocaleTimeString()}] Reset by operator`] };
-  await update(root,newState); await update(cfgRef,{officers}); stopKlaxon(); SFX.uiConfirm(); speak('System reset to idle.'); })
-
-/* ───────── Failure rate-limit ───────── */
-async function fail(kind){ try{ const key=`fail_${kind}_${Math.floor(now()/60000)}`; const snap=await get(child(securityRef,key)); const n=(snap.exists()?(snap.val()||0):0)+1; await writeSec({[key]:n}); if(n>=5) await enterLockout('Repeated failed attempts'); }catch{} }
-
-/* ───────── Initial render ───────── */
-render();
+/* ───────────────── Timer tick ───────────────── */
+setInterval(()=>{
+  if(state.status==='COUNTDOWN') render();
+}, 250);
 </script>
-</body>
-</html>
