@@ -230,7 +230,6 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebas
 import { getDatabase, ref, child, onValue, update } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
-/* ===== Firebase config (yours) ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
   authDomain: "self-destruct-console.firebaseapp.com",
@@ -241,26 +240,27 @@ const firebaseConfig = {
   appId: "1:669939099742:web:310269ae940dd68a84accf"
 };
 
-/* ===== tiny helpers ===== */
-const $ = s => document.querySelector(s);
-const now = () => Date.now();
-const pad2 = n => String(n).padStart(2,'0');
-const fmt  = ms => { if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+/* ----- utils ----- */
+const $=s=>document.querySelector(s);
+const now=()=>Date.now();
+const pad2=n=>String(n).padStart(2,'0');
+const fmt=ms=>{ if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
 
-/* ===== robust alert UI (always exists, bricks page) ===== */
-(function injectAlertCSS(){
-  const css = `
+/* ----- alert UI (robust) ----- */
+(function css(){
+  const s=document.createElement('style');
+  s.textContent=`
     body.bricked header, body.bricked main { filter: blur(1px) grayscale(.5) brightness(.7); pointer-events:none; user-select:none; }
-    #globalAlert{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;
-      background: radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.15), transparent),
-                  radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
-                  rgba(10,0,0,.92)}
+    #globalAlert{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;background:
+      radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.15), transparent),
+      radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
+      rgba(10,0,0,.92)}
     #globalAlert .m{color:#ff8080;font-weight:900;text-transform:uppercase;letter-spacing:.18em;text-align:center}
     #globalAlert .t1{font-size:clamp(28px,7vw,120px);text-shadow:0 0 20px #f22}
     #globalAlert .t2{margin-top:10px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3}
     #topBanner{position:fixed;left:0;right:0;top:0;display:none;z-index:9999;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
   `;
-  const s=document.createElement('style'); s.textContent=css; document.head.appendChild(s);
+  document.head.appendChild(s);
 })();
 function ensureAlert(){
   if(!$('#globalAlert')){
@@ -276,9 +276,17 @@ ensureAlert();
 let mustShow=false, currentKind='none';
 function brickUI(on){
   document.body.classList.toggle('bricked', on);
-  const disable=(el)=>{ if(!el) return; el.setAttribute('inert',''); el.querySelectorAll('input,button,select,textarea').forEach(x=>{x.setAttribute('disabled','true');x.setAttribute('tabindex','-1');x.setAttribute('aria-disabled','true');}); };
-  const enable=(el)=>{ if(!el) return; el.removeAttribute('inert'); el.querySelectorAll('[disabled]').forEach(x=>{x.removeAttribute('disabled');x.removeAttribute('tabindex');x.removeAttribute('aria-disabled');}); };
-  if(on){ disable($('header')); disable($('main')); } else { enable($('header')); enable($('main')); }
+  const toggle = (el, on) => {
+    if(!el) return;
+    if(on){
+      el.setAttribute('inert','');
+      el.querySelectorAll('input,button,select,textarea').forEach(x=>{x.setAttribute('disabled','true');x.setAttribute('tabindex','-1');x.setAttribute('aria-disabled','true');});
+    } else {
+      el.removeAttribute('inert');
+      el.querySelectorAll('[disabled]').forEach(x=>{x.removeAttribute('disabled');x.removeAttribute('tabindex');x.removeAttribute('aria-disabled');});
+    }
+  };
+  toggle($('header'), on); toggle($('main'), on);
 }
 function showAlert(kind, main, sub){
   ensureAlert(); mustShow=true; currentKind=kind||'generic';
@@ -298,12 +306,17 @@ function clearAlert(){
 new MutationObserver(()=>{ if(mustShow && !$('#globalAlert')) showAlert(currentKind, $('#alarmMain')?.textContent||'ALERT', $('#alarmSub')?.textContent||''); })
   .observe(document.body,{childList:true,subtree:false});
 
-/* ===== health flags for orchestrator ===== */
-let connected=false, authed=false, bootOK=false, accessDenied=false;
+/* ----- health flags ----- */
+let connected=false, authed=false, bootOK=false;
 let DEBUG_FLAG=true;
 let lockoutUntil=0, lockoutReason='';
 
-/* ===== public countdown UI refs ===== */
+/* NEW: operator capability probe (sticky access-denied) */
+let operatorCapable=false;         // becomes true only after canary succeeds
+let deniedSticky=true;             // start “denied” until proven otherwise
+let probeTimer=null;
+
+/* ----- public UI refs ----- */
 const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
 let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
 function render(){
@@ -330,7 +343,7 @@ function render(){
   if(logEl) logEl.innerHTML=(publicState.logPublic||[]).slice().reverse().join('\n');
 }
 
-/* ===== orchestrator (single place that decides which alert shows) ===== */
+/* ----- orchestrator ----- */
 function recomputeAlert(){
   if(lockoutUntil && now()<lockoutUntil){
     const secs=Math.max(0,Math.ceil((lockoutUntil-now())/1000));
@@ -345,60 +358,75 @@ function recomputeAlert(){
     showAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Authentication pending/failed');
     return;
   }
-  if(!bootOK && accessDenied){
+  // Sticky access-denied while operator capability probe fails
+  if(deniedSticky && !operatorCapable){
     showAlert('access','ACCESS DENIED — NOT OPERATOR','Waiting for operator provisioning');
     return;
   }
   clearAlert();
 }
 
-/* ===== init (NO read at /selfDestruct root) ===== */
-let app, db, auth, root, secRef;
+/* ----- init (public-only readers, NO root read) ----- */
+let app, db, auth, root, secRef, probeRef;
 (async function init(){
-  console.log('[LCARS] v5.1.4 public bootstrap');
   try{
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     await signInAnonymously(auth);
-    onAuthStateChanged(auth, u=>{ authed=!!u; recomputeAlert(); });
+    onAuthStateChanged(auth, u=>{ authed=!!u; if(authed) startProbe(); recomputeAlert(); });
 
-    db   = getDatabase(app);
-    root = ref(db,'selfDestruct');
-    secRef = child(root,'security');
+    db    = getDatabase(app);
+    root  = ref(db,'selfDestruct');
+    secRef= child(root,'security');
+    probeRef = child(root,'updateProbe'); // canary
 
-    // connection signal
+    // connection
     onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); recomputeAlert(); });
 
-    // seed ONLY the public-friendly keys; ignore errors (rules will allow during bootstrap)
-    update(root, { status:'IDLE', since:Date.now(), logPublic:[], debug:true }).catch(e=>{
-      if(String(e).includes('Permission denied')) accessDenied=true;
-    });
+    // try to seed public keys; if denied, keep deniedSticky=true
+    update(root, { status:'IDLE', since:Date.now(), logPublic:[], debug:true }).catch(()=>{ deniedSticky=true; });
 
-    // public listeners — CHILD PATHS ONLY (compatible with your rules)
-    const pub = (key, cb) => onValue(child(root, key), snap=>{ cb(snap.val()); if(key==='status') { bootOK=true; } render(); recomputeAlert(); }, _=>{ /* ignore read errors */ });
-    pub('status',     v=> publicState.status = v||'IDLE');
-    pub('since',      v=> publicState.since  = v||0);
-    pub('startAt',    v=> publicState.startAt = v||null);
-    pub('durationMs', v=> publicState.durationMs = v||0);
-    pub('armedAt',    v=> publicState.armedAt = v||null);
-    pub('logPublic',  v=> publicState.logPublic = Array.isArray(v)?v:[]);
-    pub('debug',      v=> DEBUG_FLAG = !!v);
+    // public listeners
+    const pub=(k,cb)=> onValue(child(root,k), snap=>{ cb(snap.val()); if(k==='status') bootOK=true; render(); recomputeAlert(); }, ()=>{ /* ignore */ });
+    pub('status',     v=> publicState.status=v||'IDLE');
+    pub('since',      v=> publicState.since=v||0);
+    pub('startAt',    v=> publicState.startAt=v||null);
+    pub('durationMs', v=> publicState.durationMs=v||0);
+    pub('armedAt',    v=> publicState.armedAt=v||null);
+    pub('logPublic',  v=> publicState.logPublic=Array.isArray(v)?v:[]);
+    pub('debug',      v=> DEBUG_FLAG=!!v);
 
-    // security channel (for lockout)
-    onValue(secRef, snap=>{
-      const v=snap.val()||{};
-      lockoutUntil=v.lockoutUntil||0; lockoutReason=v.lockoutReason||'LOCKOUT';
-      recomputeAlert();
-    });
+    // security
+    onValue(secRef, snap=>{ const v=snap.val()||{}; lockoutUntil=v.lockoutUntil||0; lockoutReason=v.lockoutReason||'LOCKOUT'; recomputeAlert(); });
 
   }catch(err){
-    console.error('[init error]', err);
-    connected=false; authed=false; bootOK=false;
-    recomputeAlert();
+    console.error('[init error]',err);
+    connected=false; authed=false; bootOK=false; recomputeAlert();
   }
 })();
 
-/* ===== DevTools lockout (disabled while debug=true) ===== */
+/* ----- operator capability canary ----- */
+async function canaryWrite(){
+  if(!probeRef) return;
+  try{
+    await update(probeRef, { t: Date.now() }); // only operator can write here
+    operatorCapable=true;
+    deniedSticky=false;
+  }catch(e){
+    // permission_denied → stay sticky
+    operatorCapable=false;
+    deniedSticky=true;
+  }finally{
+    recomputeAlert();
+  }
+}
+function startProbe(){
+  if(probeTimer) return;
+  probeTimer = setInterval(canaryWrite, 5000);
+  canaryWrite();
+}
+
+/* ----- DevTools lockout (disabled when debug=true) ----- */
 let dtStrikes=0, dtTimer=null;
 const devtoolsLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
 function enterLockout(reason){
@@ -407,20 +435,11 @@ function enterLockout(reason){
   recomputeAlert();
   if(secRef) update(secRef,{lockoutUntil,lockoutReason}).catch(()=>{});
 }
-function checkDev(){
-  if(DEBUG_FLAG) return;
-  if(devtoolsLikely()){
-    dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000);
-    if(dtStrikes>=2) enterLockout('Developer tools opened');
-  }
-}
+function checkDev(){ if(DEBUG_FLAG) return; if(devtoolsLikely()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) enterLockout('Developer tools opened'); } }
 setInterval(checkDev,1200);
 window.addEventListener('resize',checkDev);
-window.addEventListener('keydown',e=>{
-  if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDev();
-});
+window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDev(); });
 
-/* ===== soft countdown tick ===== */
+/* ----- soft countdown tick ----- */
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 </script>
-
