@@ -227,9 +227,10 @@ button.danger{border-color:#ff3b3b}
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getDatabase, ref, child, get, onValue, update } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getDatabase, ref, child, onValue, update } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
+/* ===== Firebase config (yours) ===== */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
   authDomain: "self-destruct-console.firebaseapp.com",
@@ -240,14 +241,14 @@ const firebaseConfig = {
   appId: "1:669939099742:web:310269ae940dd68a84accf"
 };
 
-/* ---------- tiny helpers ---------- */
+/* ===== tiny helpers ===== */
 const $ = s => document.querySelector(s);
 const now = () => Date.now();
 const pad2 = n => String(n).padStart(2,'0');
 const fmt  = ms => { if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
 
-/* ---------- inject css for bricked mode ---------- */
-(function(){
+/* ===== robust alert UI (always exists, bricks page) ===== */
+(function injectAlertCSS(){
   const css = `
     body.bricked header, body.bricked main { filter: blur(1px) grayscale(.5) brightness(.7); pointer-events:none; user-select:none; }
     #globalAlert{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;
@@ -259,14 +260,12 @@ const fmt  = ms => { if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3
     #globalAlert .t2{margin-top:10px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3}
     #topBanner{position:fixed;left:0;right:0;top:0;display:none;z-index:9999;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
   `;
-  const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s);
+  const s=document.createElement('style'); s.textContent=css; document.head.appendChild(s);
 })();
-
-/* ---------- robust alert DOM (auto-recreates if deleted) ---------- */
 function ensureAlert(){
   if(!$('#globalAlert')){
     const d=document.createElement('div'); d.id='globalAlert';
-    d.innerHTML = `<div class="m"><div id="alarmMain" class="t1">ALERT</div><div id="alarmSub" class="t2"></div></div>`;
+    d.innerHTML=`<div class="m"><div id="alarmMain" class="t1">ALERT</div><div id="alarmSub" class="t2"></div></div>`;
     document.body.appendChild(d);
   }
   if(!$('#topBanner')){
@@ -274,12 +273,12 @@ function ensureAlert(){
   }
 }
 ensureAlert();
-let mustShow = false, currentKind = 'none';
+let mustShow=false, currentKind='none';
 function brickUI(on){
-  const hdr=$('header'), main=$('main');
   document.body.classList.toggle('bricked', on);
-  [hdr,main].forEach(el=>{ if(!el) return; if(on){ el.setAttribute('inert',''); el.querySelectorAll('input,button,select,textarea').forEach(x=>{ x.setAttribute('disabled','true'); x.setAttribute('tabindex','-1'); x.setAttribute('aria-disabled','true'); }); }
-                               else { el.removeAttribute('inert'); el.querySelectorAll('input[disabled],button[disabled],select[disabled],textarea[disabled]').forEach(x=>{ x.removeAttribute('disabled'); x.removeAttribute('tabindex'); x.removeAttribute('aria-disabled'); }); } });
+  const disable=(el)=>{ if(!el) return; el.setAttribute('inert',''); el.querySelectorAll('input,button,select,textarea').forEach(x=>{x.setAttribute('disabled','true');x.setAttribute('tabindex','-1');x.setAttribute('aria-disabled','true');}); };
+  const enable=(el)=>{ if(!el) return; el.removeAttribute('inert'); el.querySelectorAll('[disabled]').forEach(x=>{x.removeAttribute('disabled');x.removeAttribute('tabindex');x.removeAttribute('aria-disabled');}); };
+  if(on){ disable($('header')); disable($('main')); } else { enable($('header')); enable($('main')); }
 }
 function showAlert(kind, main, sub){
   ensureAlert(); mustShow=true; currentKind=kind||'generic';
@@ -296,17 +295,15 @@ function clearAlert(){
   $('#topBanner').style.display='none';
   brickUI(false);
 }
-/* watchdog: if someone deletes overlay while should be shown, recreate it instantly */
-new MutationObserver(()=>{ if(mustShow && !$('#globalAlert')) { ensureAlert(); showAlert(currentKind, $('#alarmMain')?.textContent||'ALERT', $('#alarmSub')?.textContent||''); } })
+new MutationObserver(()=>{ if(mustShow && !$('#globalAlert')) showAlert(currentKind, $('#alarmMain')?.textContent||'ALERT', $('#alarmSub')?.textContent||''); })
   .observe(document.body,{childList:true,subtree:false});
 
-/* ---------- state for orchestrator ---------- */
-let app, db, auth, root, cfgRef, secRef;
+/* ===== health flags for orchestrator ===== */
 let connected=false, authed=false, bootOK=false, accessDenied=false;
 let DEBUG_FLAG=true;
 let lockoutUntil=0, lockoutReason='';
 
-/* ---------- UI (public countdown bits) ---------- */
+/* ===== public countdown UI refs ===== */
 const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
 let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
 function render(){
@@ -333,7 +330,7 @@ function render(){
   if(logEl) logEl.innerHTML=(publicState.logPublic||[]).slice().reverse().join('\n');
 }
 
-/* ---------- alert orchestrator (single source of truth) ---------- */
+/* ===== orchestrator (single place that decides which alert shows) ===== */
 function recomputeAlert(){
   if(lockoutUntil && now()<lockoutUntil){
     const secs=Math.max(0,Math.ceil((lockoutUntil-now())/1000));
@@ -355,57 +352,39 @@ function recomputeAlert(){
   clearAlert();
 }
 
-/* ---------- init ---------- */
+/* ===== init (NO read at /selfDestruct root) ===== */
+let app, db, auth, root, secRef;
 (async function init(){
-  console.log('[LCARS] build v5.1.4-max-hotfix');
+  console.log('[LCARS] v5.1.4 public bootstrap');
   try{
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-    await signInAnonymously(auth).catch(e=>{ authed=false; throw e; });
+    await signInAnonymously(auth);
     onAuthStateChanged(auth, u=>{ authed=!!u; recomputeAlert(); });
 
-    db = getDatabase(app);
-    root  = ref(db,'selfDestruct');
-    cfgRef= child(root,'config');
-    secRef= child(root,'security');
+    db   = getDatabase(app);
+    root = ref(db,'selfDestruct');
+    secRef = child(root,'security');
 
-    // connection
+    // connection signal
     onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); recomputeAlert(); });
 
-    // public state
-    onValue(root, snap=>{
-      const v=snap.val()||{};
-      publicState.status=v.status||'IDLE';
-      publicState.since=v.since||0;
-      publicState.startAt=v.startAt||null;
-      publicState.durationMs=v.durationMs||0;
-      publicState.armedAt=v.armedAt||null;
-      publicState.logPublic=Array.isArray(v.logPublic)?v.logPublic:[];
-      DEBUG_FLAG=!!v.debug;
-      bootOK=true; // we can read
-      render();
-      recomputeAlert();
-    }, err=>{
-      // read failed → likely rules misconfigured, but viewers still OK for public keys
-      console.warn('[root read error]',err);
+    // seed ONLY the public-friendly keys; ignore errors (rules will allow during bootstrap)
+    update(root, { status:'IDLE', since:Date.now(), logPublic:[], debug:true }).catch(e=>{
+      if(String(e).includes('Permission denied')) accessDenied=true;
     });
 
-    // try to seed minimal shape (allowed during bootstrap); ignore failures
-    try{
-      const s = await get(root);
-      if(!s.exists()){
-        await update(root,{status:'IDLE',since:Date.now(),startAt:null,durationMs:0,armedAt:null,logPublic:[],debug:true});
-      }
-      const c = await get(cfgRef);
-      if(!c.exists()){ await update(cfgRef,{operatorUid:null}); }
-      bootOK=true;
-    }catch(e){
-      // If this throws Permission denied, we’re in accessDenied state until operator exists
-      if(String(e).includes('Permission denied')){ accessDenied=true; bootOK=false; }
-    }
-    recomputeAlert();
+    // public listeners — CHILD PATHS ONLY (compatible with your rules)
+    const pub = (key, cb) => onValue(child(root, key), snap=>{ cb(snap.val()); if(key==='status') { bootOK=true; } render(); recomputeAlert(); }, _=>{ /* ignore read errors */ });
+    pub('status',     v=> publicState.status = v||'IDLE');
+    pub('since',      v=> publicState.since  = v||0);
+    pub('startAt',    v=> publicState.startAt = v||null);
+    pub('durationMs', v=> publicState.durationMs = v||0);
+    pub('armedAt',    v=> publicState.armedAt = v||null);
+    pub('logPublic',  v=> publicState.logPublic = Array.isArray(v)?v:[]);
+    pub('debug',      v=> DEBUG_FLAG = !!v);
 
-    // security channel
+    // security channel (for lockout)
     onValue(secRef, snap=>{
       const v=snap.val()||{};
       lockoutUntil=v.lockoutUntil||0; lockoutReason=v.lockoutReason||'LOCKOUT';
@@ -413,24 +392,23 @@ function recomputeAlert(){
     });
 
   }catch(err){
-    console.error('[Firebase init error]', err);
-    // if we got here at all, we’re likely offline
+    console.error('[init error]', err);
     connected=false; authed=false; bootOK=false;
     recomputeAlert();
   }
 })();
 
-/* ---------- DevTools lockout (disabled when debug=true) ---------- */
+/* ===== DevTools lockout (disabled while debug=true) ===== */
 let dtStrikes=0, dtTimer=null;
 const devtoolsLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
 function enterLockout(reason){
-  lockoutReason = reason || 'Security cooldown';
-  lockoutUntil = now()+5*60*1000;
+  lockoutReason=reason||'Security cooldown';
+  lockoutUntil=now()+5*60*1000;
   recomputeAlert();
   if(secRef) update(secRef,{lockoutUntil,lockoutReason}).catch(()=>{});
 }
 function checkDev(){
-  if(DEBUG_FLAG) return; // bypass in debug mode
+  if(DEBUG_FLAG) return;
   if(devtoolsLikely()){
     dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000);
     if(dtStrikes>=2) enterLockout('Developer tools opened');
@@ -442,6 +420,7 @@ window.addEventListener('keydown',e=>{
   if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDev();
 });
 
-/* ---------- soft render tick for countdown ---------- */
+/* ===== soft countdown tick ===== */
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 </script>
+
