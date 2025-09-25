@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>LCARS Self-Destruct Console v5.2</title>
+<title>LCARS Self-Destruct Console v5.3 (fixed operator gate)</title>
 <style>
 :root{
   --bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;
@@ -56,32 +56,22 @@ button.warn{border-color:#ffb400}
 button.danger{border-color:#ff3b3b}
 .footer{margin:28px 0 50px;text-align:center;color:#9fb0c9;font-size:12px}
 
-/* access gate */
-.overlay{position:fixed;inset:0;background:radial-gradient(1000px 600px at 40% -10%,rgba(255,59,59,.12),transparent), rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:30}
-.gate{width:min(520px,92vw);background:#0b0f14;border:2px solid #330;border-radius:16px;padding:18px}
-.gate h3{margin:0 0 6px;text-transform:uppercase;letter-spacing:.2em;color:#ff9b9b}
-.denied{color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
-
-/* alerts */
-#globalAlert{position:fixed;inset:0;display:none;z-index:10000;
-  background:
-  radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),
-  radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
-  repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),
-  rgba(10,0,0,.92);backdrop-filter:blur(2px);
-  align-items:center;justify-content:center}
-#globalAlert .msg{font-family:inherit;text-transform:uppercase;letter-spacing:.18em;text-align:center;font-weight:900;line-height:1.1;
-  font-size:clamp(32px,7vw,120px);color:#ff6b6b;
-  text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);
-  animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
+/* non-blocking banner + blocking overlay */
+#topBanner{position:fixed;left:0;right:0;top:54px;z-index:25;padding:10px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
+#globalAlert{position:fixed;inset:0;display:none;z-index:10000;background:radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),rgba(10,0,0,.92);backdrop-filter:blur(2px);align-items:center;justify-content:center}
+#globalAlert .msg{font-family:inherit;text-transform:uppercase;letter-spacing:.18em;text-align:center;font-weight:900;line-height:1.1;font-size:clamp(32px,7vw,120px);color:#ff6b6b;text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
 #globalAlert .sub{margin-top:14px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3;opacity:.9;letter-spacing:.14em}
 @keyframes alarmPulse{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
-@keyframes alarmGlow{0%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}
-50%{text-shadow:0 0 12px #ff3f3f,0 0 24px #ff3f3f,0 0 48px #ff3f3f,0 0 80px rgba(255,0,0,.6)}
-100%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}}
-#topBanner{position:fixed;left:0;right:0;top:54px;z-index:25;padding:10px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
+@keyframes alarmGlow{0%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}50%{text-shadow:0 0 12px #ff3f3f,0 0 24px #ff3f3f,0 0 48px #ff3f3f,0 0 80px rgba(255,0,0,.6)}100%{text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45)}}
 #cornerToasts{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;flex-direction:column;gap:8px}
 .toast{background:#220;border:1px solid #933;color:#fbb;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+
+/* ACCESS CONTROL modal (operator PIN / recovery) */
+.overlay{position:fixed;inset:0;background:radial-gradient(1000px 600px at 40% -10%,rgba(255,59,59,.12),transparent), rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:30}
+.gate{width:min(560px,92vw);background:#0b0f14;border:2px solid #330;border-radius:16px;padding:18px}
+.gate h3{margin:0 0 6px;text-transform:uppercase;letter-spacing:.2em;color:#ff9b9b}
+.denied{color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
+.small{font-size:12px;color:#9fb0c9}
 </style>
 </head>
 <body>
@@ -100,11 +90,12 @@ button.danger{border-color:#ff3b3b}
 <div id="globalAlert"><div class="msg"><span id="alarmMain">ALERT</span><div id="alarmSub" class="sub"></div></div></div>
 <div id="cornerToasts"></div>
 
-<!-- CONTROL gate -->
+<!-- ACCESS CONTROL -->
 <div id="gateOverlay" class="overlay">
   <div class="gate">
     <h3>ACCESS CONTROL</h3>
-    <div class="denied" id="gateLabel">ACCESS DENIED</div>
+    <div class="denied" id="gateLabel">LOCKED</div>
+    <p class="small">Unlock control panel using Operator PIN or rekey using Recovery Token.</p>
     <div class="two" style="margin-top:6px">
       <div>
         <label for="pin">Operator PIN</label>
@@ -115,6 +106,17 @@ button.danger{border-color:#ff3b3b}
         <button id="btnSetPin">Set PIN</button>
       </div>
     </div>
+    <div class="two" style="margin-top:8px">
+      <div>
+        <label>Recovery Token</label>
+        <input id="rkToken" type="password" placeholder="Paste token to rekey"/>
+      </div>
+      <div style="display:flex;gap:8px;align-items:end">
+        <button id="btnRekey" class="warn">Rekey via Token</button>
+        <button id="btnGenToken">Generate Token</button>
+      </div>
+    </div>
+    <p class="small" style="margin-top:6px">Only current operator can set/rotate PIN or generate the Recovery Token. Rekey accepts token on any signed-in device.</p>
   </div>
 </div>
 
@@ -156,21 +158,7 @@ button.danger{border-color:#ff3b3b}
         <button id="btnSetAsOperator">Set this device as operator</button>
         <button id="btnResetOperator" class="danger">Reset operator (set null)</button>
       </div>
-      <p class="muted" style="margin-top:6px;color:#9fb0c9">Only the current operator device can reset. After reset, the next signed-in device can claim operator.</p>
-    </section>
-
-    <section class="card" id="rekeyCard">
-      <h2>REKEY OFFICERS (BREAK-GLASS)</h2>
-      <div class="two">
-        <div><label>Operator PIN</label><input id="rkPin" type="password" placeholder="••••"/></div>
-        <div><label>Recovery Token</label><input id="rkToken" type="password" placeholder="Paste long token"/></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button id="btnGenToken">Generate token</button>
-        <button id="btnSetRecovery" class="warn">Set / Rotate Recovery Token</button>
-        <button id="btnRekey" class="danger">Rekey Officers</button>
-      </div>
-      <p class="muted" style="margin-top:6px;color:#9fb0c9">Token is single-use; only the hash is stored.</p>
+      <p class="small" style="margin-top:6px">If no operator is set, any signed-in device can claim. Once set, only that operator (or a recovery token) can transfer operator rights.</p>
     </section>
 
     <section class="card" id="officerSetupSection">
@@ -186,10 +174,6 @@ button.danger{border-color:#ff3b3b}
       <div style="display:flex;gap:8px;margin-top:12px">
         <button id="btnSaveOfficers" class="warn">Save Officers</button>
       </div>
-    </section>
-
-    <section class="card" id="officerLockedMsg" style="display:none">
-      <h2>OFFICERS</h2><p>SET & LOCKED</p>
     </section>
 
     <section class="card">
@@ -227,9 +211,12 @@ button.danger{border-color:#ff3b3b}
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getDatabase, ref, child, onValue, update } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getDatabase, ref, child, onValue, update, get, set } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
+/* =========================
+   CONFIG (keep your project)
+   ========================= */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
   authDomain: "self-destruct-console.firebaseapp.com",
@@ -240,85 +227,70 @@ const firebaseConfig = {
   appId: "1:669939099742:web:310269ae940dd68a84accf"
 };
 
-/* ----- utils ----- */
+/* =========================
+   UTILS
+   ========================= */
 const $=s=>document.querySelector(s);
 const now=()=>Date.now();
 const pad2=n=>String(n).padStart(2,'0');
 const fmt=ms=>{ if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+const toasts=$('#cornerToasts');
+function toast(txt){ const d=document.createElement('div'); d.className='toast'; d.textContent=txt; toasts.appendChild(d); setTimeout(()=>d.remove(),4200); }
+async function sha256(str){ const buf=new TextEncoder().encode(str); const h=await crypto.subtle.digest('SHA-256',buf); return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
 
-/* ----- alert UI (robust) ----- */
-(function css(){
-  const s=document.createElement('style');
-  s.textContent=`
-    body.bricked header, body.bricked main { filter: blur(1px) grayscale(.5) brightness(.7); pointer-events:none; user-select:none; }
-    #globalAlert{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000;background:
-      radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.15), transparent),
-      radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),
-      rgba(10,0,0,.92)}
-    #globalAlert .m{color:#ff8080;font-weight:900;text-transform:uppercase;letter-spacing:.18em;text-align:center}
-    #globalAlert .t1{font-size:clamp(28px,7vw,120px);text-shadow:0 0 20px #f22}
-    #globalAlert .t2{margin-top:10px;font-size:clamp(12px,1.6vw,18px);color:#ffb3b3}
-    #topBanner{position:fixed;left:0;right:0;top:0;display:none;z-index:9999;padding:10px 16px;text-align:center;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;font-weight:900;letter-spacing:.18em;text-transform:uppercase}
-  `;
-  document.head.appendChild(s);
-})();
-function ensureAlert(){
-  if(!$('#globalAlert')){
-    const d=document.createElement('div'); d.id='globalAlert';
-    d.innerHTML=`<div class="m"><div id="alarmMain" class="t1">ALERT</div><div id="alarmSub" class="t2"></div></div>`;
-    document.body.appendChild(d);
-  }
-  if(!$('#topBanner')){
-    const b=document.createElement('div'); b.id='topBanner'; b.textContent='ALERT'; document.body.prepend(b);
-  }
-}
-ensureAlert();
-let mustShow=false, currentKind='none';
-function brickUI(on){
-  document.body.classList.toggle('bricked', on);
-  const toggle = (el, on) => {
-    if(!el) return;
-    if(on){
-      el.setAttribute('inert','');
-      el.querySelectorAll('input,button,select,textarea').forEach(x=>{x.setAttribute('disabled','true');x.setAttribute('tabindex','-1');x.setAttribute('aria-disabled','true');});
-    } else {
-      el.removeAttribute('inert');
-      el.querySelectorAll('[disabled]').forEach(x=>{x.removeAttribute('disabled');x.removeAttribute('tabindex');x.removeAttribute('aria-disabled');});
-    }
-  };
-  toggle($('header'), on); toggle($('main'), on);
-}
-function showAlert(kind, main, sub){
-  ensureAlert(); mustShow=true; currentKind=kind||'generic';
-  $('#alarmMain').textContent = main || 'ALERT';
-  $('#alarmSub').textContent  = sub  || '';
-  $('#globalAlert').style.display='flex';
-  $('#topBanner').textContent = main || 'ALERT';
-  $('#topBanner').style.display='block';
-  brickUI(true);
-}
-function clearAlert(){
-  ensureAlert(); mustShow=false; currentKind='none';
-  $('#globalAlert').style.display='none';
-  $('#topBanner').style.display='none';
-  brickUI(false);
-}
-new MutationObserver(()=>{ if(mustShow && !$('#globalAlert')) showAlert(currentKind, $('#alarmMain')?.textContent||'ALERT', $('#alarmSub')?.textContent||''); })
-  .observe(document.body,{childList:true,subtree:false});
+/* =========================
+   STATE
+   ========================= */
+let app, db, auth;
+let connected=false, authed=false;
+let operatorCapable=false; // result of probe
+let unlocked=false;        // local PIN gate for UI
+let DEBUG_FLAG=true;       // can be toggled from DB
 
-/* ----- health flags ----- */
-let connected=false, authed=false, bootOK=false;
-let DEBUG_FLAG=true;
-let lockoutUntil=0, lockoutReason='';
+// DB refs
+let root, pubRef, secRef, probeRef, ctrlRef;
 
-/* NEW: operator capability probe (sticky access-denied) */
-let operatorCapable=false;         // becomes true only after canary succeeds
-let deniedSticky=true;             // start “denied” until proven otherwise
-let probeTimer=null;
+// Security snapshot cache
+let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, lockoutUntil:0, lockoutReason:'LOCKOUT' };
 
-/* ----- public UI refs ----- */
+// public state
 const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
 let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
+
+/* =========================
+   ALERTS & BANNERS
+   ========================= */
+const topBanner=$('#topBanner');
+const globalAlert=$('#globalAlert');
+const alarmMain=$('#alarmMain');
+const alarmSub=$('#alarmSub');
+
+function showBlocking(main, sub){
+  alarmMain.textContent=main||'ALERT';
+  alarmSub.textContent=sub||'';
+  globalAlert.style.display='flex';
+}
+function hideBlocking(){ globalAlert.style.display='none'; }
+function setBanner(txt){ topBanner.textContent=txt; topBanner.style.display='block'; }
+function clearBanner(){ topBanner.style.display='none'; }
+
+function recomputeAlert(){
+  if(SEC.lockoutUntil && now()<SEC.lockoutUntil){
+    const secs=Math.ceil((SEC.lockoutUntil-now())/1000);
+    showBlocking('TERMINAL LOCKOUT', `${SEC.lockoutReason} · ${secs}s remaining`);
+    return;
+  }
+  if(!connected){ showBlocking('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled'); return; }
+  if(!authed){ showBlocking('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Authentication pending/failed'); return; }
+  // Access denied is now NON-BLOCKING (banner only). Operator claim remains usable.
+  if(!operatorCapable){ hideBlocking(); setBanner('ACCESS DENIED — NOT OPERATOR · Use "Set this device as operator" or Rekey'); return; }
+  // All good
+  hideBlocking(); clearBanner();
+}
+
+/* =========================
+   RENDER
+   ========================= */
 function render(){
   const s=publicState.status||'IDLE';
   if(statusPill){ statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); }
@@ -343,51 +315,28 @@ function render(){
   if(logEl) logEl.innerHTML=(publicState.logPublic||[]).slice().reverse().join('\n');
 }
 
-/* ----- orchestrator ----- */
-function recomputeAlert(){
-  if(lockoutUntil && now()<lockoutUntil){
-    const secs=Math.max(0,Math.ceil((lockoutUntil-now())/1000));
-    showAlert('lockout','TERMINAL LOCKOUT',`${lockoutReason||'Security cooldown'} · ${secs}s remaining`);
-    return;
-  }
-  if(!connected){
-    showAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled');
-    return;
-  }
-  if(!authed){
-    showAlert('offline','SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Authentication pending/failed');
-    return;
-  }
-  // Sticky access-denied while operator capability probe fails
-  if(deniedSticky && !operatorCapable){
-    showAlert('access','ACCESS DENIED — NOT OPERATOR','Waiting for operator provisioning');
-    return;
-  }
-  clearAlert();
-}
-
-/* ----- init (public-only readers, NO root read) ----- */
-let app, db, auth, root, secRef, probeRef;
+/* =========================
+   INIT
+   ========================= */
 (async function init(){
   try{
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     await signInAnonymously(auth);
-    onAuthStateChanged(auth, u=>{ authed=!!u; if(authed) startProbe(); recomputeAlert(); });
+    onAuthStateChanged(auth, u=>{ authed=!!u; if(u){ $('#uidVal').textContent=u.uid; } recomputeAlert(); });
 
     db    = getDatabase(app);
     root  = ref(db,'selfDestruct');
+    pubRef= child(root,'public');
     secRef= child(root,'security');
-    probeRef = child(root,'updateProbe'); // canary
+    ctrlRef= child(root,'control');
+    probeRef = child(root,'updateProbe'); // canary (operator-only write by rules)
 
-    // connection
+    // Connection
     onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); recomputeAlert(); });
 
-    // try to seed public keys; if denied, keep deniedSticky=true
-    update(root, { status:'IDLE', since:Date.now(), logPublic:[], debug:true }).catch(()=>{ deniedSticky=true; });
-
-    // public listeners
-    const pub=(k,cb)=> onValue(child(root,k), snap=>{ cb(snap.val()); if(k==='status') bootOK=true; render(); recomputeAlert(); }, ()=>{ /* ignore */ });
+    // Public listeners (read-only)
+    const pub=(k,cb)=> onValue(child(pubRef,k), snap=>{ cb(snap.val()); render(); recomputeAlert(); });
     pub('status',     v=> publicState.status=v||'IDLE');
     pub('since',      v=> publicState.since=v||0);
     pub('startAt',    v=> publicState.startAt=v||null);
@@ -396,50 +345,222 @@ let app, db, auth, root, secRef, probeRef;
     pub('logPublic',  v=> publicState.logPublic=Array.isArray(v)?v:[]);
     pub('debug',      v=> DEBUG_FLAG=!!v);
 
-    // security
-    onValue(secRef, snap=>{ const v=snap.val()||{}; lockoutUntil=v.lockoutUntil||0; lockoutReason=v.lockoutReason||'LOCKOUT'; recomputeAlert(); });
+    // Security listeners
+    onValue(secRef, snap=>{
+      const v=snap.val()||{};
+      SEC.operatorUid = v.operatorUid || null;
+      SEC.pinHash     = v.pinHash || null;
+      SEC.recoveryHash= v.recoveryHash || null;
+      SEC.lockoutUntil= v.lockoutUntil || 0;
+      SEC.lockoutReason= v.lockoutReason || 'LOCKOUT';
+      // Reflect operator label
+      const me=auth.currentUser?.uid||null;
+      const isOp = me && SEC.operatorUid===me;
+      operatorLabel(isOp);
+      recomputeAlert();
+    });
+
+    // Start probe loop (non-fatal if it fails)
+    setInterval(canaryWrite, 5000);
+    canaryWrite();
 
   }catch(err){
     console.error('[init error]',err);
-    connected=false; authed=false; bootOK=false; recomputeAlert();
+    connected=false; authed=false; recomputeAlert();
   }
 })();
 
-/* ----- operator capability canary ----- */
+/* =========================
+   OPERATOR PROBE
+   ========================= */
 async function canaryWrite(){
-  if(!probeRef) return;
   try{
-    await update(probeRef, { t: Date.now() }); // only operator can write here
-    operatorCapable=true;
-    deniedSticky=false;
+    // Try to update a canary key (operator-only by rules)
+    await update(probeRef, { t: Date.now() });
+    operatorCapable=true; recomputeAlert();
   }catch(e){
-    // permission_denied → stay sticky
-    operatorCapable=false;
-    deniedSticky=true;
-  }finally{
-    recomputeAlert();
+    operatorCapable=false; recomputeAlert();
   }
 }
-function startProbe(){
-  if(probeTimer) return;
-  probeTimer = setInterval(canaryWrite, 5000);
-  canaryWrite();
+
+function operatorLabel(isOp){
+  const el=$('#opStatus');
+  if(!el) return;
+  el.textContent = isOp? 'OPERATOR DEVICE' : 'VIEWER DEVICE';
+  el.style.background = isOp? '#0b241a' : '#1e1e1e';
+  el.style.color = isOp? 'var(--ok)' : '#cfcfcf';
+  el.style.border = isOp? '1px solid #1b5c44' : '1px solid #3a3a3a';
 }
 
-/* ----- DevTools lockout (disabled when debug=true) ----- */
-let dtStrikes=0, dtTimer=null;
-const devtoolsLikely=()=>{ const T=140; return (window.outerWidth-window.innerWidth>T)||(window.outerHeight-window.innerHeight>T); };
-function enterLockout(reason){
-  lockoutReason=reason||'Security cooldown';
-  lockoutUntil=now()+5*60*1000;
-  recomputeAlert();
-  if(secRef) update(secRef,{lockoutUntil,lockoutReason}).catch(()=>{});
-}
-function checkDev(){ if(DEBUG_FLAG) return; if(devtoolsLikely()){ dtStrikes++; clearTimeout(dtTimer); dtTimer=setTimeout(()=>dtStrikes=0,5000); if(dtStrikes>=2) enterLockout('Developer tools opened'); } }
-setInterval(checkDev,1200);
-window.addEventListener('resize',checkDev);
-window.addEventListener('keydown',e=>{ if(((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key==='I'||e.key==='J'||e.key==='C'))||e.key==='F12') checkDev(); });
+/* =========================
+   ACCESS CONTROL MODAL
+   ========================= */
+const gate=$('#gateOverlay');
+$('#tabControl').addEventListener('click',()=>{ switchTab('control'); if(!unlocked) gate.style.display='flex'; });
+$('#tabCountdown').addEventListener('click',()=>{ switchTab('countdown'); });
 
-/* ----- soft countdown tick ----- */
+function switchTab(which){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  if(which==='control'){ $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; }
+  else { $('#tabCountdown').classList.add('active'); $('#viewControl').style.display='none'; $('#viewCountdown').style.display='grid'; }
+}
+
+$('#btnUnlock').addEventListener('click', async ()=>{
+  const pin=$('#pin').value.trim();
+  if(!pin){ toast('PIN required'); return; }
+  if(!SEC.pinHash){ toast('No PIN set yet'); return; }
+  const h=await sha256(pin);
+  if(h===SEC.pinHash){ unlocked=true; gate.style.display='none'; toast('Control unlocked'); }
+  else { $('#gateLabel').textContent='ACCESS DENIED'; toast('Bad PIN'); }
+});
+
+$('#btnSetPin').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Only operator can set PIN'); return; }
+  const pin=$('#pin').value.trim();
+  if(pin.length<4){ toast('PIN too short'); return; }
+  const h=await sha256(pin);
+  await update(secRef,{pinHash:h});
+  toast('Operator PIN set');
+});
+
+$('#btnGenToken').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Only operator can generate token'); return; }
+  const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
+  const token=btoa(String.fromCharCode(...bytes));
+  $('#rkToken').value=token; // show to operator for copy/export
+  const h=await sha256(token);
+  await update(secRef,{recoveryHash:h});
+  toast('Recovery token generated');
+});
+
+$('#btnRekey').addEventListener('click', async ()=>{
+  const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; }
+  const h=await sha256(token);
+  if(!SEC.recoveryHash || h!==SEC.recoveryHash){ toast('Invalid token'); return; }
+  const uid=auth.currentUser?.uid; if(!uid){ toast('Auth missing'); return; }
+  await update(secRef,{operatorUid:uid, operatorSince: Date.now()});
+  operatorCapable=true; unlocked=true; gate.style.display='none';
+  toast('Operator transferred to this device');
+  // Optional: rotate token after use
+  await update(secRef,{recoveryHash:null});
+});
+
+/* =========================
+   OPERATOR CLAIM/RESET
+   ========================= */
+$('#btnSetAsOperator').addEventListener('click', async ()=>{
+  const uid=auth.currentUser?.uid; if(!uid){ toast('Auth missing'); return; }
+  const snap=await get(secRef); const v=snap.val()||{};
+  if(!v.operatorUid){ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); return; }
+  if(v.operatorUid===uid){ toast('This device is already operator'); await canaryWrite(); return; }
+  toast('Operator already set on another device. Use Recovery Token.');
+});
+
+$('#btnResetOperator').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Only current operator can reset'); return; }
+  await update(secRef,{operatorUid:null}); operatorCapable=false; unlocked=false; toast('Operator cleared'); recomputeAlert();
+});
+
+$('#btnCopyUid').addEventListener('click',()=>{ const uid=auth.currentUser?.uid||''; navigator.clipboard.writeText(uid).then(()=>toast('UID copied')); });
+
+/* =========================
+   OFFICERS (stubs)
+   ========================= */
+$('#btnSaveOfficers').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  const o={
+    o1:{name:$('#setupO1Name').value||'', pin:$('#setupO1Pin').value||''},
+    o2:{name:$('#setupO2Name').value||'', pin:$('#setupO2Pin').value||''}
+  };
+  // Store hashed pins only
+  const o1h=o.o1.pin? await sha256(o.o1.pin): null;
+  const o2h=o.o2.pin? await sha256(o.o2.pin): null;
+  await update(child(secRef,'officers'),{ o1:{name:o.o1.name||'', pinHash:o1h}, o2:{name:o.o2.name||'', pinHash:o2h} });
+  toast('Officers saved');
+});
+
+/* =========================
+   COUNTDOWN CONTROL (stubs; writes require rules)
+   ========================= */
+$('#btnArm').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now()});
+  await appendLog('ARMED');
+});
+$('#btnDisarm').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null});
+  await appendLog('DISARMED');
+});
+$('#btnStart').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  const mins=parseInt($('#mins').value||'0',10)||0;
+  const secs=parseInt($('#secs').value||'0',10)||0;
+  const dur=(mins*60+secs)*1000;
+  await update(pubRef,{status:'COUNTDOWN', since: Date.now(), startAt: Date.now(), durationMs: dur});
+  await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`);
+});
+$('#btnAbort').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  await update(pubRef,{status:'ABORTED', since: Date.now(), startAt:null, durationMs:0});
+  await appendLog('ABORTED');
+});
+$('#btnReset').addEventListener('click', async ()=>{
+  if(!operatorCapable){ toast('Operator required'); return; }
+  await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0});
+  await appendLog('RESET');
+});
+
+async function appendLog(line){
+  try{
+    const s=await get(child(pubRef,'logPublic'));
+    const arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`);
+    await update(pubRef,{logPublic:arr});
+  }catch(e){ /* ignore */ }
+}
+
+/* =========================
+   SOFT TICK
+   ========================= */
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
+
 </script>
+
+<!--
+IMPORTANT: Realtime Database RULES required for v5.3 (deploy in Firebase Console > Realtime Database > Rules)
+
+{
+  "rules": {
+    ".read": true,
+    ".write": false,
+    "selfDestruct": {
+      "public": {
+        ".read": true,
+        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
+      },
+      "security": {
+        ".read": "auth != null",
+        ".write": "auth != null && ( !data.child('operatorUid').exists() || data.child('operatorUid').val() === auth.uid )"
+      },
+      "updateProbe": {
+        ".read": true,
+        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
+      },
+      "control": {
+        ".read": true,
+        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
+      }
+    }
+  }
+}
+
+What changed / fixes:
+- Access denied is now NON-BLOCKING (banner only) so you can claim operator.
+- Added operator claim/reset buttons and recovery token rekey flow.
+- Removed init write to root (which caused permission_denied on first load).
+- Canary update runs periodically but no longer bricks the UI if denied.
+- PIN gate for UI; PIN & recovery token stored as SHA-256 hashes.
+- All control writes target /selfDestruct/public and are guarded by rules.
+-->
+</body>
+</html>
