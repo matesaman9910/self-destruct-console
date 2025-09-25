@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self‑Destruct — v8.2</title>
+<title>LCARS Self‑Destruct — v9 (Strict)</title>
 <style>
 :root{--bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;--ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;--amber:#ffb400;--red:#ff3b3b}
 *{box-sizing:border-box}
@@ -24,12 +24,13 @@ main{max-width:1200px;margin:0 auto;padding:22px}
 .card{background:linear-gradient(180deg,#161b28,#111621);border:1px solid #202c3d;border-radius:18px;padding:18px}
 .card h2{margin:0 0 12px;letter-spacing:.12em;text-transform:uppercase}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-input{background:#0f1421;border:1px solid #203049;color:#eaf2ff;padding:12px;border-radius:12px;width:100%}
+input,textarea{background:#0f1421;border:1px solid #203049;color:#eaf2ff;padding:12px;border-radius:12px;width:100%}
 label{display:block;font-size:12px;color:#9fb0c9;margin-bottom:6px}
 button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #2a3b56;background:#0f1623;color:#e6eefb;font-weight:800}
 button.primary{border-color:#21d39e}
 button.warn{border-color:#ffb400}
 button.danger{border-color:#ff3b3b}
+button[disabled]{opacity:.5;cursor:not-allowed}
 .small{font-size:12px;color:#9fb0c9}
 .code{font-family:ui-monospace,Menlo,Consolas,monospace}
 .statusRow{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
@@ -46,6 +47,11 @@ button.danger{border-color:#ff3b3b}
 .log{background:#0b0f18;border:1px solid #1b2740;border-radius:14px;padding:12px;height:220px;overflow:auto}
 .flash{animation:flash .8s steps(4) infinite}
 @keyframes flash{50%{opacity:.35}}
+/* Gate overlay */
+#gate{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;z-index:40}
+#gate .box{width:min(560px,92vw);background:#0b0f14;border:2px solid #333;border-radius:16px;padding:18px}
+#gate h3{margin:0 0 6px;text-transform:uppercase;letter-spacing:.2em;color:#ff9b9b}
+.locked{filter:blur(.8px) grayscale(.4)}
 </style>
 </head>
 <body>
@@ -61,8 +67,24 @@ button.danger{border-color:#ff3b3b}
 </header>
 <div id="banner">INITIALIZING…</div>
 <div id="toasts"></div>
+<div id="gate" role="dialog" aria-modal="true">
+  <div class="box">
+    <h3>CONTROL LOCK</h3>
+    <p class="small">Enter Operator PIN to unlock local controls. (Server writes still require operator.)</p>
+    <form id="formUnlock" class="two" autocomplete="on" novalidate>
+      <div>
+        <label for="pin">Operator PIN</label>
+        <input id="pin" name="operator_pin" type="password" placeholder="Enter PIN" autocomplete="current-password" inputmode="numeric"/>
+      </div>
+      <div style="display:flex;gap:8px;align-items:end">
+        <button id="btnUnlock" class="primary" type="submit">Unlock</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <main class="grid">
+  <!-- COUNTDOWN VIEW -->
   <section id="viewCountdown" class="grid">
     <div class="card" style="display:flex;flex-direction:column;align-items:center;text-align:center">
       <h2>SELF‑DESTRUCT STATUS</h2>
@@ -83,7 +105,8 @@ button.danger{border-color:#ff3b3b}
     </div>
   </section>
 
-  <section id="viewControl" class="grid" style="display:none;grid-template-columns:1fr 1fr">
+  <!-- CONTROL VIEW -->
+  <section id="viewControl" class="grid locked" style="display:none;grid-template-columns:1fr 1fr" aria-hidden="true">
     <div class="card">
       <h2>OPERATOR</h2>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -93,46 +116,49 @@ button.danger{border-color:#ff3b3b}
         <button id="btnClaim">Set this device as operator</button>
         <button id="btnResetOp" class="danger">Reset operator (null)</button>
       </div>
-      <p class="small">If operator not set, any signed‑in device can claim. Once set, only that operator (or a valid recovery token) can transfer.</p>
+      <p class="small">Claim works only if no operator is set. Otherwise use Recovery Token.</p>
     </div>
 
     <div class="card">
-      <h2>ACCESS CONTROL</h2>
-      <form id="formPin" class="two" autocomplete="on" novalidate>
+      <h2>RECOVERY TOKEN</h2>
+      <div class="two">
         <div>
-          <label for="pin">Operator PIN</label>
-          <input id="pin" name="operator_pin" type="password" placeholder="Enter PIN" autocomplete="current-password" inputmode="numeric"/>
+          <label for="rkToken">Token</label>
+          <input id="rkToken" placeholder="Paste token or generate" />
         </div>
         <div style="display:flex;gap:8px;align-items:end">
-          <button id="btnUnlock" class="primary" type="submit">Unlock</button>
-          <button id="btnSetPin" type="button">Set PIN</button>
+          <button id="btnRekey" class="warn">Rekey with Token</button>
+          <button id="btnGenToken" type="button">Generate (operator)</button>
+          <button id="btnCopyToken" type="button">Copy</button>
         </div>
-      </form>
-
-      <form id="formRekey" class="two" autocomplete="off" novalidate style="margin-top:8px">
-        <div>
-          <label for="rkToken">Recovery Token</label>
-          <input id="rkToken" name="recovery_token" type="password" placeholder="Paste token" autocomplete="one-time-code"/>
-        </div>
-        <div style="display:flex;gap:8px;align-items:end">
-          <button id="btnRekey" class="warn" type="submit">Rekey via Token</button>
-          <button id="btnGenToken" type="button">Generate Token (operator)</button>
-        </div>
-      </form>
-      <p class="small">Rekey is server-verified via hash; token never stored in DB. Token is single‑use.</p>
+      </div>
+      <p class="small">Token is single‑use; only its SHA‑256 hash is stored.</p>
     </div>
 
-    <div class="card">
-      <h2>OFFICERS — ONE‑TIME SETUP</h2>
+    <div class="card" id="officersCard">
+      <h2>OFFICERS — SETUP (locks on save)</h2>
       <form id="formOfficers" class="two" autocomplete="off" novalidate>
         <div><label for="o1n">Officer 1 Name</label><input id="o1n" placeholder="Name"/></div>
         <div><label for="o1p">Officer 1 PIN</label><input id="o1p" type="password" placeholder="••••" autocomplete="new-password"/></div>
         <div><label for="o2n">Officer 2 Name</label><input id="o2n" placeholder="Name"/></div>
         <div><label for="o2p">Officer 2 PIN</label><input id="o2p" type="password" placeholder="••••" autocomplete="new-password"/></div>
         <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:10px">
-          <button id="btnSaveOfficers" class="warn" type="submit">Save Officers</button>
+          <button id="btnSaveOfficers" class="warn" type="submit">Save & Lock</button>
+          <span id="officersLockedPill" class="pill" style="display:none;padding:6px 10px">LOCKED</span>
         </div>
       </form>
+      <div id="rotateBlock" style="display:none;margin-top:10px">
+        <h3 class="small">Rotate officers (requires Recovery Token)</h3>
+        <div class="two" style="margin-top:6px">
+          <div><label>New O1 Name</label><input id="r_o1n" placeholder="Name"/></div>
+          <div><label>New O1 PIN</label><input id="r_o1p" type="password" placeholder="••••"/></div>
+        </div>
+        <div class="two" style="margin-top:6px">
+          <div><label>New O2 Name</label><input id="r_o2n" placeholder="Name"/></div>
+          <div><label>New O2 PIN</label><input id="r_o2p" type="password" placeholder="••••"/></div>
+        </div>
+        <button id="btnRotateOfficers" class="danger" style="margin-top:8px">Rotate with Token</button>
+      </div>
     </div>
 
     <div class="card">
@@ -160,6 +186,7 @@ button.danger{border-color:#ff3b3b}
         <button id="btnAbort" class="danger">Abort</button>
         <button id="btnReset">Reset</button>
       </div>
+      <p class="small">Start requires ARMED. Abort requires COUNTDOWN. Reset allowed from ABORTED/DETONATED/IDLE.</p>
     </div>
   </section>
 </main>
@@ -179,67 +206,70 @@ function toast(txt){ const d=document.createElement('div'); d.className='toast';
 async function sha256(str){ const buf=new TextEncoder().encode(str); const h=await crypto.subtle.digest('SHA-256',buf); return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
 
 /* STATE */
-let app, db, auth; let connected=false, authed=false, operatorCapable=false;
-let initStableSince=0; const STABLE_MS=900; // anti‑flicker
+let app, db, auth; let connected=false, authed=false, operatorCapable=false; let unlocked=false; // local UI gate
+let initStableSince=0; const STABLE_MS=900;
 let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
-let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, rekeyAttempt:null, officers:{ o1:{}, o2:{} } };
+let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, officers:{}, officersLocked:false };
 
-/* DOM refs */
-const banner=$('#banner'); const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
+/* DOM */
+const banner=$('#banner'); const gate=$('#gate'); const control=$('#viewControl');
+const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
+const officersLockedPill=$('#officersLockedPill'); const rotateBlock=$('#rotateBlock');
 
-/* NAV */
+/* NAV + GATE */
 $('#tabCountdown').addEventListener('click',()=>showTab('countdown'));
-$('#tabControl').addEventListener('click',()=>showTab('control'));
+$('#tabControl').addEventListener('click',()=>{ showTab('control'); ensureGate(); });
+$('#formUnlock').addEventListener('submit', async e=>{ e.preventDefault(); const pin=$('#pin').value.trim(); if(!SEC.pinHash){ unlocked=true; closeGate(); return; } if(!pin){ toast('PIN required'); return; } if(await sha256(pin)===SEC.pinHash){ unlocked=true; closeGate(); toast('Control unlocked'); } else { toast('Bad PIN'); } });
+function ensureGate(){ const mustLock = !!SEC.pinHash; control.classList.toggle('locked', !unlocked && mustLock); control.setAttribute('aria-hidden', (!unlocked && mustLock) ? 'true':'false'); gate.style.display = (!unlocked && mustLock) ? 'flex':'none'; }
+function closeGate(){ control.classList.remove('locked'); control.setAttribute('aria-hidden','false'); gate.style.display='none'; }
 function showTab(which){ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); if(which==='control'){ $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; } else { $('#tabCountdown').classList.add('active'); $('#viewControl').style.display='none'; $('#viewCountdown').style.display='grid'; } }
 
 function setBanner(txt){ banner.textContent=txt; banner.style.display = txt? 'block':'none'; }
 function recomputeBanner(){ if(!(connected && authed)){ setBanner('INITIALIZING…'); return; } if(initStableSince===0) initStableSince=now(); if(now()-initStableSince<STABLE_MS){ setBanner('INITIALIZING…'); return; } setBanner(operatorCapable? '' : 'ACCESS DENIED — NOT OPERATOR · Claim or Rekey'); }
 
-function render(){ const s=publicState.status||'IDLE'; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent = publicState.since ? new Date(publicState.since).toLocaleString() : '–'; if(s==='COUNTDOWN'){ const left=(publicState.startAt||0)+(publicState.durationMs||0)-now(); timeLeftEl.textContent=fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); if(publicState.durationMs>0) barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/publicState.durationMs))))+'%'; infoEl.textContent=`${Math.floor((publicState.durationMs||0)/60000)}m ${pad2(Math.floor((publicState.durationMs||0)/1000)%60)}s from ${new Date(publicState.startAt||0).toLocaleTimeString()}`; } else if(s==='ARMED'){ timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; infoEl.textContent='Awaiting MARK'; } else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; } else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; infoEl.textContent='—'; } logEl.textContent=(publicState.logPublic||[]).slice().reverse().join('\n'); }
+function render(){ const s=publicState.status||'IDLE'; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent = publicState.since ? new Date(publicState.since).toLocaleString() : '–'; if(s==='COUNTDOWN'){ const left=(publicState.startAt||0)+(publicState.durationMs||0)-now(); timeLeftEl.textContent=fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); if(publicState.durationMs>0) barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/publicState.durationMs))))+'%'; infoEl.textContent=`${Math.floor((publicState.durationMs||0)/60000)}m ${pad2(Math.floor((publicState.durationMs||0)/1000)%60)}s from ${new Date(publicState.startAt||0).toLocaleTimeString()}`; } else if(s==='ARMED'){ timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; infoEl.textContent='Awaiting MARK'; } else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; } else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; infoEl.textContent='—'; } logEl.textContent=(publicState.logPublic||[]).slice().reverse().join('\n'); // officers lock UI
+  officersLockedPill.style.display = SEC.officersLocked? 'inline-flex':'none'; $('#btnSaveOfficers').disabled = SEC.officersLocked || !operatorCapable; rotateBlock.style.display = SEC.officersLocked? 'block':'none'; ensureGate(); }
 
 /* BOOT */
 let root, pubRef, secRef, probeRef;
 (async function init(){ try{ app = initializeApp(firebaseConfig); auth = getAuth(app); await signInAnonymously(auth); onAuthStateChanged(auth, u=>{ authed=!!u; $('#uidVal').textContent=u?u.uid:'—'; if(u) initStableSince=now(); recomputeBanner(); render(); }); db = getDatabase(app); root=ref(db,'selfDestruct'); pubRef=child(root,'public'); secRef=child(root,'security'); probeRef=child(root,'updateProbe'); onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); if(connected) initStableSince=now(); recomputeBanner(); render(); }); const pub=(k,cb)=> onValue(child(pubRef,k), snap=>{ cb(snap.val()); render(); }); pub('status',v=> publicState.status=v||'IDLE'); pub('since',v=> publicState.since=v||0); pub('startAt',v=> publicState.startAt=v||null); pub('durationMs',v=> publicState.durationMs=v||0); pub('armedAt',v=> publicState.armedAt=v||null); pub('logPublic',v=> publicState.logPublic=Array.isArray(v)?v:[]);
-  // security (readable only to operator); attach cancel to avoid console errors
-  onValue(secRef, snap=>{ const v=snap.val()||{}; SEC={...SEC, ...v}; operatorLabel(); }, err=>{ /* ignore permission_denied for non-operator */ });
+  onValue(secRef, snap=>{ const v=snap.val()||{}; SEC.pinHash=v.pinHash||null; SEC.recoveryHash=v.recoveryHash||null; SEC.operatorUid=v.operatorUid||null; SEC.officersLocked=!!v.officersLocked; // officers names/hashes unreadable to non-operator; that's fine for UI
+    operatorLabel(); render(); }, err=>{});
   setInterval(canaryWrite, 5000); canaryWrite(); }catch(err){ console.error(err); toast('Init error'); } })();
 
-async function canaryWrite(){ try{ await update(probeRef,{t:Date.now()}); operatorCapable=true; } catch{ operatorCapable=false; } finally{ recomputeBanner(); } }
+async function canaryWrite(){ try{ await update(probeRef,{t:Date.now()}); operatorCapable=true; } catch{ operatorCapable=false; } finally{ recomputeBanner(); render(); } }
 function operatorLabel(){ const el=$('#opStatus'); const me=auth?.currentUser?.uid; const isOp=!!me && SEC.operatorUid===me; el.textContent=isOp?'OPERATOR DEVICE':'VIEWER DEVICE'; el.style.background=isOp?'#0b241a':'#1e1e1e'; el.style.color=isOp?'var(--ok)':'#cfcfcf'; el.style.border=isOp?'1px solid #1b5c44':'1px solid #3a3a3a'; }
 
 /* OPERATOR MGMT */
 $('#btnCopyUid').addEventListener('click',()=>{ const uid=auth?.currentUser?.uid; if(uid) navigator.clipboard.writeText(uid).then(()=>toast('UID copied')); });
-$('#btnClaim').addEventListener('click', async ()=>{ const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); } catch(e){ const code=e?.code||''; if(String(code).includes('permission_denied')) toast('Operator already set — use Recovery Token'); else toast('Claim failed'); } });
-$('#btnResetOp').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } try{ await update(secRef,{operatorUid:null}); toast('Operator cleared'); operatorCapable=false; recomputeBanner(); } catch{ toast('Reset failed'); } });
+$('#btnClaim').addEventListener('click', async ()=>{ const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); } catch(e){ toast('Operator already set — use Recovery Token'); } });
+$('#btnResetOp').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } const status=publicState.status; if(status!=='IDLE'){ toast('Cannot change operator while not IDLE'); return; } try{ await update(secRef,{operatorUid:null}); toast('Operator cleared'); operatorCapable=false; recomputeBanner(); } catch{ toast('Reset failed'); } });
 
-/* ACCESS CONTROL */
-$('#formPin').addEventListener('submit', async e=>{ e.preventDefault(); const pin=$('#pin').value.trim(); if(!pin){ toast('PIN required'); return; } if(!SEC.pinHash){ toast('No PIN set'); return; } try{ if(await sha256(pin)===SEC.pinHash){ toast('Control unlocked'); } else toast('Bad PIN'); } catch{ toast('Unlock failed'); } });
-$('#btnSetPin').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } const pin=$('#pin').value.trim(); if(pin.length<4){ toast('PIN too short'); return; } try{ await update(secRef,{pinHash: await sha256(pin)}); toast('PIN set'); } catch{ toast('Set PIN failed'); } });
-
-// Secure server-verified rekey: write rekeyAttempt = SHA256(token) alongside operatorUid=self and recoveryHash=null
 $('#btnGenToken').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } try{ const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const token=btoa(String.fromCharCode(...bytes)); $('#rkToken').value=token; await update(secRef,{recoveryHash: await sha256(token)}); toast('Token generated'); } catch{ toast('Token generation failed'); } });
-$('#formRekey').addEventListener('submit', async e=>{ e.preventDefault(); const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ const h=await sha256(token); await update(secRef,{ operatorUid:uid, operatorSince: Date.now(), recoveryHash:null, rekeyAttempt:h }); toast('Operator transferred to this device'); await canaryWrite(); } catch(err){ const code=err?.code||''; if(String(code).includes('permission_denied')) toast('Rekey failed — invalid token or already operator'); else toast('Rekey failed'); } });
+$('#btnCopyToken').addEventListener('click',()=>{ const v=$('#rkToken').value; if(!v){ toast('No token'); return; } navigator.clipboard.writeText(v).then(()=>toast('Token copied')); });
+$('#btnRekey').addEventListener('click', async ()=>{ const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, operatorUid:uid, operatorSince: Date.now(), recoveryHash:null }); toast('Operator transferred'); await canaryWrite(); } catch{ toast('Rekey failed'); } });
 
 /* OFFICERS */
-$('#formOfficers').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } const n1=$('#o1n').value.trim(), p1=$('#o1p').value.trim(); const n2=$('#o2n').value.trim(), p2=$('#o2p').value.trim(); try{ await update(child(secRef,'officers'),{ o1:{name:n1||'', pinHash:p1?await sha256(p1):null}, o2:{name:n2||'', pinHash:p2?await sha256(p2):null} }); toast('Officers saved'); } catch{ toast('Save officers failed'); } });
+$('#formOfficers').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } if(SEC.officersLocked){ toast('Officers are locked'); return; } const n1=$('#o1n').value.trim(), p1=$('#o1p').value.trim(); const n2=$('#o2n').value.trim(), p2=$('#o2p').value.trim(); if(!n1||!p1||!n2||!p2){ toast('Both officers require name+PIN'); return; } try{ await update(secRef,{ officers:{ o1:{name:n1, pinHash: await sha256(p1)}, o2:{name:n2, pinHash: await sha256(p2)} }, officersLocked:true }); toast('Officers saved & locked'); SEC.officersLocked=true; render(); } catch{ toast('Save officers failed'); } });
+$('#btnRotateOfficers').addEventListener('click', async ()=>{ const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } const n1=$('#r_o1n').value.trim(), p1=$('#r_o1p').value.trim(); const n2=$('#r_o2n').value.trim(), p2=$('#r_o2p').value.trim(); if(!n1||!p1||!n2||!p2){ toast('Both officers require name+PIN'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, officers:{ o1:{name:n1, pinHash: await sha256(p1)}, o2:{name:n2, pinHash: await sha256(p2)} }, officersLocked:true }); toast('Officers rotated'); } catch{ toast('Rotate failed'); } });
 
-/* VERIFY + STATE */
+/* VERIFY + FSM‑AWARE CONTROLS */
 async function verifyOfficers(){ try{ const v=(await get(secRef)).val()||{}; const off=v.officers||{}; const i1n=$('#v1n').value.trim(), i1p=$('#v1p').value.trim(); const i2n=$('#v2n').value.trim(), i2p=$('#v2p').value.trim(); const h1=i1p?await sha256(i1p):''; const h2=i2p?await sha256(i2p):''; const ok1=!!off.o1 && (off.o1.name||'')===i1n && (off.o1.pinHash||'')===h1; const ok2=!!off.o2 && (off.o2.name||'')===i2n && (off.o2.pinHash||'')===h2; return ok1 && ok2; } catch{ return false; } }
-$('#formVerify').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } if(!(await verifyOfficers())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now()}); await appendLog('ARMED'); toast('Armed'); } catch{ toast('Arm failed'); } });
-$('#btnDisarm').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null}); await appendLog('DISARMED'); } catch{ toast('Disarm failed'); } });
+$('#formVerify').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } if(!SEC.officersLocked){ toast('Set officers first'); return; } if(publicState.status!=='IDLE'){ toast('Can only ARM from IDLE'); return; } if(!(await verifyOfficers())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now(), startAt:null, durationMs:0}); await appendLog('ARMED'); toast('Armed'); } catch{ toast('Arm failed'); } });
+$('#btnDisarm').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } if(!(publicState.status==='ARMED'||publicState.status==='COUNTDOWN')){ toast('Disarm only from ARMED/COUNTDOWN'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null}); await appendLog('DISARMED'); } catch{ toast('Disarm failed'); } });
 
-/* COUNTDOWN */
-$('#btnStart').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } const mins=parseInt($('#mins').value||'0',10)||0; const secs=parseInt($('#secs').value||'0',10)||0; const dur=(mins*60+secs)*1000; try{ await update(pubRef,{status:'COUNTDOWN', since: Date.now(), startAt: Date.now(), durationMs: dur}); await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`); } catch{ toast('Start failed'); } });
-$('#btnAbort').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } try{ await update(pubRef,{status:'ABORTED', since: Date.now(), startAt:null, durationMs:0}); await appendLog('ABORTED'); } catch{ toast('Abort failed'); } });
-$('#btnReset').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0}); await appendLog('RESET'); } catch{ toast('Reset failed'); } });
+/* COUNTDOWN strict */
+$('#btnStart').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } if(publicState.status!=='ARMED'){ toast('Arm first'); return; } const mins=parseInt($('#mins').value||'0',10)||0; const secs=parseInt($('#secs').value||'0',10)||0; const dur=(mins*60+secs)*1000; if(dur<=0){ toast('Duration must be > 0'); return; } try{ await update(pubRef,{status:'COUNTDOWN', since: Date.now(), startAt: Date.now(), durationMs: dur}); await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`); } catch{ toast('Start failed'); } });
+$('#btnAbort').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } if(publicState.status!=='COUNTDOWN'){ toast('Abort only from COUNTDOWN'); return; } try{ await update(pubRef,{status:'ABORTED', since: Date.now(), startAt:null, durationMs:0}); await appendLog('ABORTED'); } catch{ toast('Abort failed'); } });
+$('#btnReset').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } if(!(publicState.status==='ABORTED'||publicState.status==='DETONATED'||publicState.status==='IDLE')){ toast('Reset only from ABORTED/DETONATED/IDLE'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null}); await appendLog('RESET'); } catch{ toast('Reset failed'); } });
 
-async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')); let arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`); if(arr.length>500) arr=arr.slice(-500); await update(pubRef,{logPublic:arr}); } catch{ /* ignore */ } }
+async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')); let arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`); if(arr.length>500) arr=arr.slice(-500); await update(pubRef,{logPublic:arr}); } catch{} }
 
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 </script>
 
 <!-- =============================
-     REALTIME DATABASE RULES v8.2 (copy into Realtime Database > Rules)
+     REALTIME DATABASE RULES v9 (copy into Realtime Database > Rules)
 ============================== -->
 <!--
 {
@@ -252,30 +282,60 @@ setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
         ".read": true,
         ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || !root.child('selfDestruct/security/operatorUid').exists() )",
 
-        "status":     { ".validate": "newData.isString() && newData.val().matches(/^(IDLE|ARMED|COUNTDOWN|ABORTED|DETONATED)$/)" },
+        "status": {
+          ".validate": "newData.isString() && newData.val().matches(/^(IDLE|ARMED|COUNTDOWN|ABORTED|DETONATED)$/) && (
+            (data.val()=='IDLE'      && (newData.val()=='IDLE' || newData.val()=='ARMED')) ||
+            (data.val()=='ARMED'     && (newData.val()=='IDLE' || newData.val()=='COUNTDOWN')) ||
+            (data.val()=='COUNTDOWN' && (newData.val()=='IDLE' || newData.val()=='ABORTED' || newData.val()=='DETONATED')) ||
+            (data.val()=='ABORTED'   && (newData.val()=='IDLE')) ||
+            (data.val()=='DETONATED' && (newData.val()=='IDLE')) ||
+            (!data.exists() && newData.val()=='IDLE')
+          ) && (
+            newData.val()!='COUNTDOWN' || ( newData.parent().child('startAt').isNumber() && newData.parent().child('durationMs').isNumber() && newData.parent().child('armedAt').isNumber() )
+          ) && (
+            newData.val()!='DETONATED' || data.val()=='COUNTDOWN'
+          )"
+        },
         "since":      { ".validate": "newData.isNumber() && newData.val() >= 0" },
         "startAt":    { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
         "durationMs": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000" },
         "armedAt":    { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
-
-        "logPublic": {
-          "$i": { ".validate": "$i.matches(/^[0-9]+$/) && newData.isString()" }
-        }
+        "logPublic":  { "$i": { ".validate": "$i.matches(/^[0-9]+$/) && newData.isString()" } }
       },
 
       "security": {
         ".read":  "auth != null && root.child('selfDestruct/security/operatorUid').val() == auth.uid",
-        ".write": "auth != null && (\n          root.child('selfDestruct/security/operatorUid').val() == auth.uid\n          || !root.child('selfDestruct/security/operatorUid').exists()\n          || (\n            data.child('recoveryHash').exists() &&\n            newData.child('rekeyAttempt').isString() &&\n            newData.child('rekeyAttempt').val().matches(/^[a-f0-9]{64}$/) &&\n            newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() &&\n            newData.child('operatorUid').val() == auth.uid &&\n            newData.child('recoveryHash').val() == null\n          )\n        )",
+        ".write": "auth != null && (
+          root.child('selfDestruct/security/operatorUid').val() == auth.uid ||
+          !root.child('selfDestruct/security/operatorUid').exists() ||
+          (
+            data.child('recoveryHash').exists() &&
+            newData.child('rekeyAttempt').isString() && newData.child('rekeyAttempt').val().matches(/^[a-f0-9]{64}$/) &&
+            newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() &&
+            newData.child('operatorUid').val() == auth.uid &&
+            newData.child('recoveryHash').val() == null
+          )
+        ) && (
+          root.child('selfDestruct/public/status').val()=='IDLE' || !root.child('selfDestruct/security/operatorUid').exists() ||
+          ( data.child('recoveryHash').exists() && newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() )
+        )",
 
         "operatorUid": { ".validate": "newData.val() == auth.uid || newData.val() == null" },
         "pinHash":     { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
         "recoveryHash":{ ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
         "rekeyAttempt":{ ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
+        "officersLocked": { ".validate": "newData.isBoolean()" },
 
         "officers": {
-          ".validate": "newData.hasChildren(['o1','o2'])",
-          "o1": {"name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" }},
-          "o2": {"name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" }}
+          ".validate": "(
+            !data.exists() && newData.parent().child('officersLocked').val() == true
+          ) || (
+            data.exists() && newData.val() == data.val()
+          ) || (
+            newData.parent().child('rekeyAttempt').isString() && newData.parent().child('rekeyAttempt').val() == data.parent().child('recoveryHash').val() && newData.parent().child('officersLocked').val() == true
+          )",
+          "o1": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } },
+          "o2": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } }
         }
       },
 
