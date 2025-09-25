@@ -1,14 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>LCARS Self-Destruct Console v5.3 (fixed operator gate)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LCARS Self‑Destruct Console v6 — Rebuilt</title>
 <style>
 :root{
   --bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;
-  --lcars-amber:#ffb400;--lcars-red:#ff3b3b;
-  --ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;
+  --lcars-amber:#ffb400;--lcars-red:#ff3b3b;--ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
@@ -28,11 +27,11 @@ main{max-width:1200px;margin:0 auto;padding:22px}
 .centerCard h2{margin:0 0 12px;letter-spacing:.12em;text-transform:uppercase}
 .statusRow{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
 .pill{padding:6px 14px;border-radius:999px;font-weight:900;letter-spacing:.1em}
-.idle{background:#0b241a;color:var(--ok);border:1px solid #1b5c44}
-.armed{background:#241f0b;color:var(--warn);border:1px solid #6b560d}
-.countdown{background:#2a0b0b;color:var(--alert);border:1px solid #6b2323}
-.aborted{background:#1e1e1e;color:#cfcfcf;border:1px solid #3a3a3a}
-.detonated{background:#360909;color:#ff9b9b;border:1px solid #833}
+.pill.idle{background:#0b241a;color:var(--ok);border:1px solid #1b5c44}
+.pill.armed{background:#241f0b;color:var(--warn);border:1px solid #6b560d}
+.pill.countdown{background:#2a0b0b;color:var(--alert);border:1px solid #6b2323}
+.pill.aborted{background:#1e1e1e;color:#cfcfcf;border:1px solid #3a3a3a}
+.pill.detonated{background:#360909;color:#ff9b9b;border:1px solid #833}
 .k{color:#9fb0c9;text-transform:uppercase;letter-spacing:.12em;font-size:13px}
 .timer{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:14px}
 .big{font-variant-numeric:tabular-nums;font-size:96px;line-height:1;letter-spacing:.04em}
@@ -56,7 +55,7 @@ button.warn{border-color:#ffb400}
 button.danger{border-color:#ff3b3b}
 .footer{margin:28px 0 50px;text-align:center;color:#9fb0c9;font-size:12px}
 
-/* non-blocking banner + blocking overlay */
+/* banners + blocking overlay */
 #topBanner{position:fixed;left:0;right:0;top:54px;z-index:25;padding:10px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
 #globalAlert{position:fixed;inset:0;display:none;z-index:10000;background:radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.18), transparent),radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),repeating-linear-gradient(90deg, rgba(255,0,0,.08) 0 6px, transparent 6px 12px),rgba(10,0,0,.92);backdrop-filter:blur(2px);align-items:center;justify-content:center}
 #globalAlert .msg{font-family:inherit;text-transform:uppercase;letter-spacing:.18em;text-align:center;font-weight:900;line-height:1.1;font-size:clamp(32px,7vw,120px);color:#ff6b6b;text-shadow:0 0 8px #ff2a2a,0 0 18px #ff2a2a,0 0 36px #ff2a2a,0 0 60px rgba(255,0,0,.45);animation:alarmPulse 1.2s ease-in-out infinite,alarmGlow 2.4s ease-in-out infinite}
@@ -66,7 +65,7 @@ button.danger{border-color:#ff3b3b}
 #cornerToasts{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;flex-direction:column;gap:8px}
 .toast{background:#220;border:1px solid #933;color:#fbb;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 
-/* ACCESS CONTROL modal (operator PIN / recovery) */
+/* ACCESS CONTROL (local UI gate) */
 .overlay{position:fixed;inset:0;background:radial-gradient(1000px 600px at 40% -10%,rgba(255,59,59,.12),transparent), rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:30}
 .gate{width:min(560px,92vw);background:#0b0f14;border:2px solid #330;border-radius:16px;padding:18px}
 .gate h3{margin:0 0 6px;text-transform:uppercase;letter-spacing:.2em;color:#ff9b9b}
@@ -78,7 +77,7 @@ button.danger{border-color:#ff3b3b}
 <header>
   <div class="lcars">
     <div class="bar"></div><div class="bar2"></div>
-    <div class="title">LCARS // SELF-DESTRUCT CONSOLE</div>
+    <div class="title">LCARS // SELF‑DESTRUCT CONSOLE</div>
     <div class="tabs">
       <button class="tab active" id="tabCountdown">COUNTDOWN</button>
       <button class="tab" id="tabControl">CONTROL</button>
@@ -95,7 +94,7 @@ button.danger{border-color:#ff3b3b}
   <div class="gate">
     <h3>ACCESS CONTROL</h3>
     <div class="denied" id="gateLabel">LOCKED</div>
-    <p class="small">Unlock control panel using Operator PIN or rekey using Recovery Token.</p>
+    <p class="small">Unlock Control with Operator PIN or rekey via Recovery Token.</p>
     <div class="two" style="margin-top:6px">
       <div>
         <label for="pin">Operator PIN</label>
@@ -116,7 +115,7 @@ button.danger{border-color:#ff3b3b}
         <button id="btnGenToken">Generate Token</button>
       </div>
     </div>
-    <p class="small" style="margin-top:6px">Only current operator can set/rotate PIN or generate the Recovery Token. Rekey accepts token on any signed-in device.</p>
+    <p class="small" style="margin-top:6px">Only operator can set/rotate PIN or generate token. Rekey accepts token on any signed‑in device.</p>
   </div>
 </div>
 
@@ -124,7 +123,7 @@ button.danger{border-color:#ff3b3b}
   <!-- COUNTDOWN VIEW -->
   <div id="viewCountdown">
     <section class="centerCard">
-      <h2>SELF-DESTRUCT STATUS</h2>
+      <h2>SELF‑DESTRUCT STATUS</h2>
       <div class="statusRow">
         <span class="k">STATE</span><span id="statusPill" class="pill idle">IDLE</span>
         <span class="k">SINCE</span><span id="since">–</span>
@@ -140,7 +139,6 @@ button.danger{border-color:#ff3b3b}
         <label style="font-size:12px;color:#9fb0c9"><input id="chkTick" type="checkbox" checked> tick each second</label>
       </div>
     </section>
-
     <section class="card" style="max-width:min(980px,92vw);margin:0 auto">
       <h2>EVENT LOG</h2>
       <div id="log" class="log"></div>
@@ -158,11 +156,11 @@ button.danger{border-color:#ff3b3b}
         <button id="btnSetAsOperator">Set this device as operator</button>
         <button id="btnResetOperator" class="danger">Reset operator (set null)</button>
       </div>
-      <p class="small" style="margin-top:6px">If no operator is set, any signed-in device can claim. Once set, only that operator (or a recovery token) can transfer operator rights.</p>
+      <p class="small" style="margin-top:6px">If operator not set, any signed‑in device can claim. Once set, only that operator (or a recovery token) can transfer.</p>
     </section>
 
     <section class="card" id="officerSetupSection">
-      <h2>OFFICERS — ONE-TIME SETUP</h2>
+      <h2>OFFICERS — ONE‑TIME SETUP</h2>
       <div class="two">
         <div><label>Officer 1 Name</label><input id="setupO1Name" placeholder="Name"/></div>
         <div><label>Officer 1 PIN</label><input id="setupO1Pin" type="password" placeholder="••••"/></div>
@@ -190,6 +188,7 @@ button.danger{border-color:#ff3b3b}
         <button id="btnArm" class="warn">Arm</button>
         <button id="btnDisarm">Disarm</button>
       </div>
+      <p class="small">Arming requires exact officer names and PINs (matched against stored hashes).</p>
     </section>
 
     <section class="card">
@@ -206,16 +205,16 @@ button.danger{border-color:#ff3b3b}
     </section>
   </div>
 
-  <div class="footer">LCARS single-file · Firebase Realtime DB · Operator-gated control · Countdown public</div>
+  <div class="footer">LCARS v6 · Realtime DB · Operator‑gated control · Public countdown</div>
 </main>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getDatabase, ref, child, onValue, update, get, set } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getDatabase, ref, child, onValue, update, get } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
 
 /* =========================
-   CONFIG (keep your project)
+   CONFIG — use your project
    ========================= */
 const firebaseConfig = {
   apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
@@ -242,16 +241,13 @@ async function sha256(str){ const buf=new TextEncoder().encode(str); const h=awa
    STATE
    ========================= */
 let app, db, auth;
-let connected=false, authed=false;
-let operatorCapable=false; // result of probe
-let unlocked=false;        // local PIN gate for UI
-let DEBUG_FLAG=true;       // can be toggled from DB
+let connected=false, authed=false, operatorCapable=false, unlocked=false;
 
-// DB refs
-let root, pubRef, secRef, probeRef, ctrlRef;
+// Refs
+let root, pubRef, secRef, probeRef;
 
-// Security snapshot cache
-let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, lockoutUntil:0, lockoutReason:'LOCKOUT' };
+// Security cache
+let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, officers:{ o1:{name:'',pinHash:null}, o2:{name:'',pinHash:null} }, lockoutUntil:0, lockoutReason:'LOCKOUT' };
 
 // public state
 const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
@@ -265,26 +261,17 @@ const globalAlert=$('#globalAlert');
 const alarmMain=$('#alarmMain');
 const alarmSub=$('#alarmSub');
 
-function showBlocking(main, sub){
-  alarmMain.textContent=main||'ALERT';
-  alarmSub.textContent=sub||'';
-  globalAlert.style.display='flex';
-}
+function showBlocking(main, sub){ alarmMain.textContent=main||'ALERT'; alarmSub.textContent=sub||''; globalAlert.style.display='flex'; }
 function hideBlocking(){ globalAlert.style.display='none'; }
 function setBanner(txt){ topBanner.textContent=txt; topBanner.style.display='block'; }
 function clearBanner(){ topBanner.style.display='none'; }
 
 function recomputeAlert(){
-  if(SEC.lockoutUntil && now()<SEC.lockoutUntil){
-    const secs=Math.ceil((SEC.lockoutUntil-now())/1000);
-    showBlocking('TERMINAL LOCKOUT', `${SEC.lockoutReason} · ${secs}s remaining`);
-    return;
-  }
+  if(SEC.lockoutUntil && now()<SEC.lockoutUntil){ const secs=Math.ceil((SEC.lockoutUntil-now())/1000); showBlocking('TERMINAL LOCKOUT', `${SEC.lockoutReason} · ${secs}s remaining`); return; }
   if(!connected){ showBlocking('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Firebase unreachable · controls disabled'); return; }
   if(!authed){ showBlocking('SELF DESTRUCT SYSTEM DAMAGED — OFFLINE','Authentication pending/failed'); return; }
-  // Access denied is now NON-BLOCKING (banner only). Operator claim remains usable.
-  if(!operatorCapable){ hideBlocking(); setBanner('ACCESS DENIED — NOT OPERATOR · Use "Set this device as operator" or Rekey'); return; }
-  // All good
+  // Access denied is banner‑only, so operator claim remains usable
+  if(!operatorCapable){ hideBlocking(); setBanner('ACCESS DENIED — NOT OPERATOR · Claim operator or rekey'); return; }
   hideBlocking(); clearBanner();
 }
 
@@ -325,17 +312,18 @@ function render(){
     await signInAnonymously(auth);
     onAuthStateChanged(auth, u=>{ authed=!!u; if(u){ $('#uidVal').textContent=u.uid; } recomputeAlert(); });
 
-    db    = getDatabase(app);
+    const db0 = getDatabase(app);
+    // Persists DB in module scope
+    db=db0;
     root  = ref(db,'selfDestruct');
     pubRef= child(root,'public');
     secRef= child(root,'security');
-    ctrlRef= child(root,'control');
-    probeRef = child(root,'updateProbe'); // canary (operator-only write by rules)
+    probeRef = child(root,'updateProbe');
 
-    // Connection
+    // Connection state
     onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); recomputeAlert(); });
 
-    // Public listeners (read-only)
+    // Public listeners
     const pub=(k,cb)=> onValue(child(pubRef,k), snap=>{ cb(snap.val()); render(); recomputeAlert(); });
     pub('status',     v=> publicState.status=v||'IDLE');
     pub('since',      v=> publicState.since=v||0);
@@ -343,49 +331,40 @@ function render(){
     pub('durationMs', v=> publicState.durationMs=v||0);
     pub('armedAt',    v=> publicState.armedAt=v||null);
     pub('logPublic',  v=> publicState.logPublic=Array.isArray(v)?v:[]);
-    pub('debug',      v=> DEBUG_FLAG=!!v);
 
-    // Security listeners
+    // Security listener
     onValue(secRef, snap=>{
       const v=snap.val()||{};
       SEC.operatorUid = v.operatorUid || null;
       SEC.pinHash     = v.pinHash || null;
       SEC.recoveryHash= v.recoveryHash || null;
+      SEC.officers    = v.officers || {o1:{},o2:{}};
       SEC.lockoutUntil= v.lockoutUntil || 0;
       SEC.lockoutReason= v.lockoutReason || 'LOCKOUT';
-      // Reflect operator label
       const me=auth.currentUser?.uid||null;
-      const isOp = me && SEC.operatorUid===me;
-      operatorLabel(isOp);
+      operatorLabel(me && (SEC.operatorUid===me));
       recomputeAlert();
     });
 
-    // Start probe loop (non-fatal if it fails)
+    // Start probe loop (non‑fatal if it fails)
     setInterval(canaryWrite, 5000);
     canaryWrite();
 
   }catch(err){
-    console.error('[init error]',err);
-    connected=false; authed=false; recomputeAlert();
+    console.error('[init error]',err); connected=false; authed=false; recomputeAlert();
   }
 })();
 
 /* =========================
-   OPERATOR PROBE
+   OPERATOR PROBE & LABEL
    ========================= */
 async function canaryWrite(){
-  try{
-    // Try to update a canary key (operator-only by rules)
-    await update(probeRef, { t: Date.now() });
-    operatorCapable=true; recomputeAlert();
-  }catch(e){
-    operatorCapable=false; recomputeAlert();
-  }
+  try{ await update(probeRef, { t: Date.now() }); operatorCapable=true; }
+  catch{ operatorCapable=false; }
+  finally{ recomputeAlert(); }
 }
-
 function operatorLabel(isOp){
-  const el=$('#opStatus');
-  if(!el) return;
+  const el=$('#opStatus'); if(!el) return;
   el.textContent = isOp? 'OPERATOR DEVICE' : 'VIEWER DEVICE';
   el.style.background = isOp? '#0b241a' : '#1e1e1e';
   el.style.color = isOp? 'var(--ok)' : '#cfcfcf';
@@ -393,12 +372,11 @@ function operatorLabel(isOp){
 }
 
 /* =========================
-   ACCESS CONTROL MODAL
+   ACCESS CONTROL (modal)
    ========================= */
 const gate=$('#gateOverlay');
 $('#tabControl').addEventListener('click',()=>{ switchTab('control'); if(!unlocked) gate.style.display='flex'; });
 $('#tabCountdown').addEventListener('click',()=>{ switchTab('countdown'); });
-
 function switchTab(which){
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   if(which==='control'){ $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; }
@@ -406,8 +384,7 @@ function switchTab(which){
 }
 
 $('#btnUnlock').addEventListener('click', async ()=>{
-  const pin=$('#pin').value.trim();
-  if(!pin){ toast('PIN required'); return; }
+  const pin=$('#pin').value.trim(); if(!pin){ toast('PIN required'); return; }
   if(!SEC.pinHash){ toast('No PIN set yet'); return; }
   const h=await sha256(pin);
   if(h===SEC.pinHash){ unlocked=true; gate.style.display='none'; toast('Control unlocked'); }
@@ -416,21 +393,15 @@ $('#btnUnlock').addEventListener('click', async ()=>{
 
 $('#btnSetPin').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Only operator can set PIN'); return; }
-  const pin=$('#pin').value.trim();
-  if(pin.length<4){ toast('PIN too short'); return; }
-  const h=await sha256(pin);
-  await update(secRef,{pinHash:h});
-  toast('Operator PIN set');
+  const pin=$('#pin').value.trim(); if(pin.length<4){ toast('PIN too short'); return; }
+  const h=await sha256(pin); await update(secRef,{pinHash:h}); toast('Operator PIN set');
 });
 
 $('#btnGenToken').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Only operator can generate token'); return; }
   const bytes=new Uint8Array(24); crypto.getRandomValues(bytes);
-  const token=btoa(String.fromCharCode(...bytes));
-  $('#rkToken').value=token; // show to operator for copy/export
-  const h=await sha256(token);
-  await update(secRef,{recoveryHash:h});
-  toast('Recovery token generated');
+  const token=btoa(String.fromCharCode(...bytes)); $('#rkToken').value=token; // show to copy
+  const h=await sha256(token); await update(secRef,{recoveryHash:h}); toast('Recovery token generated');
 });
 
 $('#btnRekey').addEventListener('click', async ()=>{
@@ -438,11 +409,8 @@ $('#btnRekey').addEventListener('click', async ()=>{
   const h=await sha256(token);
   if(!SEC.recoveryHash || h!==SEC.recoveryHash){ toast('Invalid token'); return; }
   const uid=auth.currentUser?.uid; if(!uid){ toast('Auth missing'); return; }
-  await update(secRef,{operatorUid:uid, operatorSince: Date.now()});
-  operatorCapable=true; unlocked=true; gate.style.display='none';
-  toast('Operator transferred to this device');
-  // Optional: rotate token after use
-  await update(secRef,{recoveryHash:null});
+  await update(secRef,{operatorUid:uid, operatorSince: Date.now(), recoveryHash:null});
+  operatorCapable=true; unlocked=true; gate.style.display='none'; toast('Operator transferred to this device');
 });
 
 /* =========================
@@ -452,8 +420,8 @@ $('#btnSetAsOperator').addEventListener('click', async ()=>{
   const uid=auth.currentUser?.uid; if(!uid){ toast('Auth missing'); return; }
   const snap=await get(secRef); const v=snap.val()||{};
   if(!v.operatorUid){ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); return; }
-  if(v.operatorUid===uid){ toast('This device is already operator'); await canaryWrite(); return; }
-  toast('Operator already set on another device. Use Recovery Token.');
+  if(v.operatorUid===uid){ toast('Already operator'); await canaryWrite(); return; }
+  toast('Operator already set. Use Recovery Token.');
 });
 
 $('#btnResetOperator').addEventListener('click', async ()=>{
@@ -464,103 +432,110 @@ $('#btnResetOperator').addEventListener('click', async ()=>{
 $('#btnCopyUid').addEventListener('click',()=>{ const uid=auth.currentUser?.uid||''; navigator.clipboard.writeText(uid).then(()=>toast('UID copied')); });
 
 /* =========================
-   OFFICERS (stubs)
+   OFFICERS
    ========================= */
 $('#btnSaveOfficers').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
-  const o={
-    o1:{name:$('#setupO1Name').value||'', pin:$('#setupO1Pin').value||''},
-    o2:{name:$('#setupO2Name').value||'', pin:$('#setupO2Pin').value||''}
-  };
-  // Store hashed pins only
-  const o1h=o.o1.pin? await sha256(o.o1.pin): null;
-  const o2h=o.o2.pin? await sha256(o.o2.pin): null;
-  await update(child(secRef,'officers'),{ o1:{name:o.o1.name||'', pinHash:o1h}, o2:{name:o.o2.name||'', pinHash:o2h} });
+  const n1=$('#setupO1Name').value.trim(), p1=$('#setupO1Pin').value.trim();
+  const n2=$('#setupO2Name').value.trim(), p2=$('#setupO2Pin').value.trim();
+  const h1=p1? await sha256(p1): null; const h2=p2? await sha256(p2): null;
+  await update(child(secRef,'officers'),{ o1:{name:n1||'', pinHash:h1}, o2:{name:n2||'', pinHash:h2} });
   toast('Officers saved');
 });
 
+async function verifyOfficers(){
+  const vSnap=await get(secRef); const v=vSnap.val()||{}; const off=v.officers||{};
+  const i1n=($('#verifyO1Name').value||'').trim();
+  const i1p=($('#verifyO1Pin').value||'').trim();
+  const i2n=($('#verifyO2Name').value||'').trim();
+  const i2p=($('#verifyO2Pin').value||'').trim();
+  const h1=i1p? await sha256(i1p):''; const h2=i2p? await sha256(i2p):'';
+  const ok1 = !!off.o1 && (off.o1.name||'')===i1n && (off.o1.pinHash||'')===h1;
+  const ok2 = !!off.o2 && (off.o2.name||'')===i2n && (off.o2.pinHash||'')===h2;
+  return ok1 && ok2;
+}
+
 /* =========================
-   COUNTDOWN CONTROL (stubs; writes require rules)
+   COUNTDOWN CONTROL
    ========================= */
+async function appendLog(line){
+  try{ const s=await get(child(pubRef,'logPublic')); const arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`); await update(pubRef,{logPublic:arr}); }
+  catch{ /* ignore */ }
+}
+
 $('#btnArm').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
+  if(!(await verifyOfficers())){ toast('Officer verification failed'); return; }
   await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now()});
-  await appendLog('ARMED');
+  await appendLog('ARMED'); toast('Armed');
 });
+
 $('#btnDisarm').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
   await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null});
-  await appendLog('DISARMED');
+  await appendLog('DISARMED'); toast('Disarmed');
 });
+
 $('#btnStart').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
-  const mins=parseInt($('#mins').value||'0',10)||0;
-  const secs=parseInt($('#secs').value||'0',10)||0;
-  const dur=(mins*60+secs)*1000;
+  const mins=parseInt($('#mins').value||'0',10)||0; const secs=parseInt($('#secs').value||'0',10)||0; const dur=(mins*60+secs)*1000;
   await update(pubRef,{status:'COUNTDOWN', since: Date.now(), startAt: Date.now(), durationMs: dur});
-  await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`);
+  await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`); toast('Countdown started');
 });
+
 $('#btnAbort').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
   await update(pubRef,{status:'ABORTED', since: Date.now(), startAt:null, durationMs:0});
-  await appendLog('ABORTED');
+  await appendLog('ABORTED'); toast('Aborted');
 });
+
 $('#btnReset').addEventListener('click', async ()=>{
   if(!operatorCapable){ toast('Operator required'); return; }
   await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0});
-  await appendLog('RESET');
+  await appendLog('RESET'); toast('Reset');
 });
-
-async function appendLog(line){
-  try{
-    const s=await get(child(pubRef,'logPublic'));
-    const arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`);
-    await update(pubRef,{logPublic:arr});
-  }catch(e){ /* ignore */ }
-}
 
 /* =========================
    SOFT TICK
    ========================= */
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 
+/* =========================
+   SOUND (optional, local only)
+   ========================= */
+let audioCtx=null, tickOn=true; const chkTick=$('#chkTick');
+$('#btnToggleSound').addEventListener('click',()=>{ if(!audioCtx){ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); } tickOn=!tickOn; });
+setInterval(()=>{
+  if(!audioCtx||!tickOn) return; if(publicState.status!=='COUNTDOWN') return;
+  const left=(publicState.startAt||0)+(publicState.durationMs||0)-now(); if(left<0) return;
+  const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='square'; o.frequency.setValueAtTime(880,audioCtx.currentTime); g.gain.value=0.02; o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.06);
+}, 1000);
+
 </script>
 
-<!--
-IMPORTANT: Realtime Database RULES required for v5.3 (deploy in Firebase Console > Realtime Database > Rules)
-
+<!-- =========================
+     REALTIME DATABASE RULES (deploy these)
+     =========================
 {
   "rules": {
-    ".read": true,
+    ".read": false,
     ".write": false,
     "selfDestruct": {
       "public": {
         ".read": true,
-        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
+        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/config/operatorUid').val() == auth.uid || ( !root.child('selfDestruct/security/operatorUid').exists() && !root.child('selfDestruct/config/operatorUid').exists() ) )"
       },
       "security": {
-        ".read": "auth != null",
-        ".write": "auth != null && ( !data.child('operatorUid').exists() || data.child('operatorUid').val() === auth.uid )"
+        ".read": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/config/operatorUid').val() == auth.uid )",
+        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/config/operatorUid').val() == auth.uid || ( !root.child('selfDestruct/security/operatorUid').exists() && !root.child('selfDestruct/config/operatorUid').exists() ) )"
       },
       "updateProbe": {
         ".read": true,
-        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
-      },
-      "control": {
-        ".read": true,
-        ".write": "auth != null && root.child('selfDestruct/security/operatorUid').val() === auth.uid"
+        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/config/operatorUid').val() == auth.uid || ( !root.child('selfDestruct/security/operatorUid').exists() && !root.child('selfDestruct/config/operatorUid').exists() ) )"
       }
     }
   }
 }
-
-What changed / fixes:
-- Access denied is now NON-BLOCKING (banner only) so you can claim operator.
-- Added operator claim/reset buttons and recovery token rekey flow.
-- Removed init write to root (which caused permission_denied on first load).
-- Canary update runs periodically but no longer bricks the UI if denied.
-- PIN gate for UI; PIN & recovery token stored as SHA-256 hashes.
-- All control writes target /selfDestruct/public and are guarded by rules.
 -->
 </body>
 </html>
