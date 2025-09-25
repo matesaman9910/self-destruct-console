@@ -1,883 +1,340 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { initializeApp, type FirebaseApp } from "firebase/app";
-import {
-  getDatabase,
-  ref,
-  child,
-  onValue,
-  update,
-  get,
-  type Database,
-  serverTimestamp,
-} from "firebase/database";
-import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LCARS Self‑Destruct — v8 Rebuild</title>
+<style>
+:root{--bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;--ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;--amber:#ffb400;--red:#ff3b3b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial}
+header{position:sticky;top:0;z-index:20;padding:10px 14px;background:linear-gradient(180deg,#0e1118,#0a0c11);border-bottom:2px solid var(--line)}
+.lcars{display:flex;align-items:center;gap:14px}
+.lcars .b1{height:24px;width:160px;border-radius:12px 0 0 12px;background:var(--amber)}
+.lcars .b2{height:24px;width:110px;border-radius:0 12px 12px 0;background:var(--red)}
+.title{letter-spacing:.28em;text-transform:uppercase;font-weight:900}
+.tabs{margin-left:auto;display:flex;gap:8px}
+.tab{cursor:pointer;padding:10px 14px;border:2px solid var(--line);background:#131722;border-radius:999px;color:#dde7ff;font-weight:800;letter-spacing:.08em}
+.tab.active{background:linear-gradient(90deg,#2a0000,#4a0000);border-color:#a22;color:#fff}
+main{max-width:1200px;margin:0 auto;padding:22px}
 
-// =============== CONFIG =================
-// Replace with your project if needed
-const firebaseConfig = {
-  apiKey: "AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
-  authDomain: "self-destruct-console.firebaseapp.com",
-  databaseURL:
-    "https://self-destruct-console-default-rtdb.europe-west1.firebasedatabase.app/",
-  projectId: "self-destruct-console",
-  storageBucket: "self-destruct-console.firebasestorage.app",
-  messagingSenderId: "669939099742",
-  appId: "1:669939099742:web:310269ae940dd68a84accf",
-};
+#banner{position:fixed;left:0;right:0;top:50px;z-index:25;padding:10px 16px;text-align:center;font-weight:900;letter-spacing:.18em;text-transform:uppercase;border-bottom:2px solid #300;background:#1a0000;color:#ff9b9b;display:none}
+#alert{position:fixed;inset:0;display:none;z-index:10000;align-items:center;justify-content:center;background:radial-gradient(1200px 700px at 30% -10%, rgba(255,0,0,.15), transparent),radial-gradient(1200px 700px at 70% 110%, rgba(255,0,0,.12), transparent),rgba(10,0,0,.92)}
+#alert .msg{font-weight:900;text-transform:uppercase;letter-spacing:.18em;text-align:center;line-height:1.1;font-size:clamp(32px,7vw,120px);color:#ff6b6b;text-shadow:0 0 18px #ff2a2a}
+#alert .sub{margin-top:10px;color:#ffb3b3;letter-spacing:.14em}
+#toasts{position:fixed;right:12px;bottom:12px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{background:#220;border:1px solid #933;color:#fbb;padding:8px 10px;border-radius:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 
-// =============== TYPES ==================
-type Status = "IDLE" | "ARMED" | "COUNTDOWN" | "ABORTED" | "DETONATED";
+.grid{display:grid;gap:18px}
+.card{background:linear-gradient(180deg,#161b28,#111621);border:1px solid #202c3d;border-radius:18px;padding:18px}
+.card h2{margin:0 0 12px;letter-spacing:.12em;text-transform:uppercase}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+input{background:#0f1421;border:1px solid #203049;color:#eaf2ff;padding:12px;border-radius:12px;width:100%}
+label{display:block;font-size:12px;color:#9fb0c9;margin-bottom:6px}
+button{cursor:pointer;padding:12px 14px;border-radius:12px;border:1px solid #2a3b56;background:#0f1623;color:#e6eefb;font-weight:800}
+button.primary{border-color:#21d39e}
+button.warn{border-color:#ffb400}
+button.danger{border-color:#ff3b3b}
+.small{font-size:12px;color:#9fb0c9}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace}
 
-type PublicState = {
-  status: Status;
-  since: number | null;
-  startAt: number | null;
-  durationMs: number;
-  armedAt: number | null;
-  logPublic: string[];
-};
+/* Countdown visuals */
+.statusRow{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pill{padding:6px 14px;border-radius:999px;font-weight:900;letter-spacing:.1em}
+.pill.idle{background:#0b241a;color:var(--ok);border:1px solid #1b5c44}
+.pill.armed{background:#241f0b;color:var(--warn);border:1px solid #6b560d}
+.pill.countdown{background:#2a0b0b;color:var(--alert);border:1px solid #6b2323}
+.pill.aborted{background:#1e1e1e;color:#cfcfcf;border:1px solid #3a3a3a}
+.pill.detonated{background:#360909;color:#ff9b9b;border:1px solid #833}
+.timer{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:14px}
+.big{font-variant-numeric:tabular-nums;font-size:96px;line-height:1}
+.bar{height:18px;background:#101827;border:1px solid #1f2d44;border-radius:999px;overflow:hidden;width:min(900px,92vw);margin-top:12px}
+.bar>div{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--warn),var(--alert));transition:width .2s linear}
+.log{background:#0b0f18;border:1px solid #1b2740;border-radius:14px;padding:12px;height:220px;overflow:auto}
+.flash{animation:flash .8s steps(4) infinite}
+@keyframes flash{50%{opacity:.35}}
 
-type Officer = { name: string; pinHash: string | null };
-
-type SecurityState = {
-  operatorUid: string | null;
-  operatorSince?: number | null;
-  pinHash: string | null;
-  recoveryHash: string | null;
-  officers: { o1?: Officer; o2?: Officer };
-  lockoutUntil?: number | null;
-  lockoutReason?: string | null;
-};
-
-// =============== UTILS ===================
-const pad2 = (n: number) => String(n).padStart(2, "0");
-const fmt = (ms: number) => {
-  if (ms < 0) ms = 0;
-  const t = Math.floor(ms / 1000),
-    h = Math.floor(t / 3600),
-    m = Math.floor((t % 3600) / 60),
-    s = t % 60;
-  return (h ? pad2(h) + ":" : "") + pad2(m) + ":" + pad2(s);
-};
-async function sha256(str: string) {
-  const buf = new TextEncoder().encode(str);
-  const h = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(h))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-// =========== FIREBASE BOOTSTRAP ===========
-function useFirebase() {
-  const appRef = useRef<FirebaseApp>();
-  const dbRef = useRef<Database>();
-  const [user, setUser] = useState<User | null>(null);
-  const [connected, setConnected] = useState<boolean>(false);
-
-  useEffect(() => {
-    const app = initializeApp(firebaseConfig);
-    appRef.current = app;
-    const db = getDatabase(app);
-    dbRef.current = db;
-
-    const auth = getAuth(app);
-    signInAnonymously(auth).catch(() => {});
-    const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
-
-    const connRef = ref(db, ".info/connected");
-    const unsubConn = onValue(connRef, (s) => setConnected(s.val() === true));
-
-    return () => {
-      unsubAuth();
-      unsubConn();
-    };
-  }, []);
-
-  return { app: appRef.current, db: dbRef.current, user, connected };
-}
-
-// =============== DATA HOOKS ===============
-function usePublic(db?: Database) {
-  const [pub, setPub] = useState<PublicState>({
-    status: "IDLE",
-    since: null,
-    startAt: null,
-    durationMs: 0,
-    armedAt: null,
-    logPublic: [],
-  });
-  useEffect(() => {
-    if (!db) return;
-    const base = ref(db, "selfDestruct/public");
-    const unsub = [
-      onValue(child(base, "status"), (s) =>
-        setPub((p) => ({ ...p, status: (s.val() as Status) ?? "IDLE" }))
-      ),
-      onValue(child(base, "since"), (s) =>
-        setPub((p) => ({ ...p, since: s.val() ?? null }))
-      ),
-      onValue(child(base, "startAt"), (s) =>
-        setPub((p) => ({ ...p, startAt: s.val() ?? null }))
-      ),
-      onValue(child(base, "durationMs"), (s) =>
-        setPub((p) => ({ ...p, durationMs: s.val() ?? 0 }))
-      ),
-      onValue(child(base, "armedAt"), (s) =>
-        setPub((p) => ({ ...p, armedAt: s.val() ?? null }))
-      ),
-      onValue(child(base, "logPublic"), (s) =>
-        setPub((p) => ({ ...p, logPublic: Array.isArray(s.val()) ? s.val() : [] }))
-      ),
-    ];
-    return () => unsub.forEach((u) => u());
-  }, [db]);
-  return pub;
-}
-
-function useSecurity(db?: Database, uid?: string | null) {
-  const [sec, setSec] = useState<SecurityState>({
-    operatorUid: null,
-    pinHash: null,
-    recoveryHash: null,
-    officers: {},
-    lockoutUntil: null,
-    lockoutReason: null,
-  });
-  const isOperator = useMemo(
-    () => !!uid && sec.operatorUid === uid,
-    [uid, sec.operatorUid]
-  );
-  useEffect(() => {
-    if (!db) return;
-    const base = ref(db, "selfDestruct/security");
-    return onValue(base, (s) => setSec((s.val() as SecurityState) || sec));
-  }, [db]);
-  return { sec, isOperator };
-}
-
-function useProbe(db?: Database, isOperator?: boolean) {
-  const [operatorCapable, setOpCap] = useState(false);
-  useEffect(() => {
-    if (!db) return;
-    const pr = ref(db, "selfDestruct/updateProbe");
-    let timer: any;
-    async function tick() {
-      try {
-        await update(pr, { t: Date.now() });
-        setOpCap(true);
-      } catch {
-        setOpCap(false);
-      }
-    }
-    tick();
-    timer = setInterval(tick, 5000);
-    return () => clearInterval(timer);
-  }, [db, isOperator]);
-  return operatorCapable;
-}
-
-// ============ ACTIONS (DB writes) ============
-function useActions(db?: Database, user?: User | null) {
-  const pubRef = useMemo(() => (db ? ref(db, "selfDestruct/public") : undefined), [db]);
-  const secRef = useMemo(() => (db ? ref(db, "selfDestruct/security") : undefined), [db]);
-  const uid = user?.uid;
-
-  async function appendLog(line: string) {
-    if (!db || !pubRef) return;
-    const snap = await get(child(pubRef, "logPublic"));
-    const arr: string[] = Array.isArray(snap.val()) ? snap.val() : [];
-    arr.push(`${new Date().toLocaleString()} — ${line}`);
-    await update(pubRef, { logPublic: arr });
-  }
-
-  return {
-    async claimOperator() {
-      if (!db || !secRef || !uid) return { ok: false, msg: "No auth" };
-      const s = await get(secRef);
-      const cur = (s.val() as SecurityState) || {};
-      if (!cur.operatorUid) {
-        await update(secRef, { operatorUid: uid, operatorSince: Date.now() });
-        return { ok: true };
-      }
-      if (cur.operatorUid === uid) return { ok: true, msg: "Already operator" };
-      return { ok: false, msg: "Operator already set" };
-    },
-
-    async resetOperator() {
-      if (!secRef) return;
-      await update(secRef, { operatorUid: null });
-    },
-
-    async setPin(pin: string) {
-      if (!secRef) return { ok: false };
-      const h = await sha256(pin);
-      await update(secRef, { pinHash: h });
-      return { ok: true };
-    },
-
-    async genToken() {
-      if (!secRef) return { ok: false };
-      const bytes = new Uint8Array(24);
-      crypto.getRandomValues(bytes);
-      const token = btoa(String.fromCharCode(...bytes));
-      const h = await sha256(token);
-      await update(secRef, { recoveryHash: h });
-      return { ok: true, token };
-    },
-
-    async rekeyWithToken(token: string) {
-      if (!secRef || !uid) return { ok: false };
-      const s = await get(secRef);
-      const cur = (s.val() as SecurityState) || {};
-      const h = await sha256(token);
-      if (!cur.recoveryHash || h !== cur.recoveryHash)
-        return { ok: false, msg: "Invalid token" };
-      await update(secRef, {
-        operatorUid: uid,
-        operatorSince: Date.now(),
-        recoveryHash: null,
-      });
-      return { ok: true };
-    },
-
-    async saveOfficers(o1: Officer, o2: Officer) {
-      if (!secRef) return { ok: false };
-      await update(child(secRef, "officers"), { o1, o2 });
-      return { ok: true };
-    },
-
-    async verifyOfficers(i1Name: string, i1Pin: string, i2Name: string, i2Pin: string) {
-      if (!secRef) return false;
-      const s = await get(secRef);
-      const v = (s.val() as SecurityState) || {};
-      const off = v.officers || {};
-      const h1 = i1Pin ? await sha256(i1Pin) : "";
-      const h2 = i2Pin ? await sha256(i2Pin) : "";
-      const ok1 = !!off.o1 && (off.o1.name || "") === i1Name && (off.o1.pinHash || "") === h1;
-      const ok2 = !!off.o2 && (off.o2.name || "") === i2Name && (off.o2.pinHash || "") === h2;
-      return ok1 && ok2;
-    },
-
-    async arm(i1Name: string, i1Pin: string, i2Name: string, i2Pin: string) {
-      if (!pubRef) return { ok: false };
-      const ok = await this.verifyOfficers(i1Name, i1Pin, i2Name, i2Pin);
-      if (!ok) return { ok: false, msg: "Officer verification failed" };
-      await update(pubRef, { status: "ARMED", since: Date.now(), armedAt: Date.now() });
-      await appendLog("ARMED");
-      return { ok: true };
-    },
-
-    async disarm() {
-      if (!pubRef) return { ok: false };
-      await update(pubRef, {
-        status: "IDLE",
-        since: Date.now(),
-        startAt: null,
-        durationMs: 0,
-        armedAt: null,
-      });
-      await appendLog("DISARMED");
-      return { ok: true };
-    },
-
-    async startCountdown(mins: number, secs: number) {
-      if (!pubRef) return { ok: false };
-      const dur = (mins * 60 + secs) * 1000;
-      await update(pubRef, {
-        status: "COUNTDOWN",
-        since: Date.now(),
-        startAt: Date.now(),
-        durationMs: dur,
-      });
-      await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`);
-      return { ok: true };
-    },
-
-    async abort() {
-      if (!pubRef) return { ok: false };
-      await update(pubRef, { status: "ABORTED", since: Date.now(), startAt: null, durationMs: 0 });
-      await appendLog("ABORTED");
-      return { ok: true };
-    },
-
-    async reset() {
-      if (!pubRef) return { ok: false };
-      await update(pubRef, { status: "IDLE", since: Date.now(), startAt: null, durationMs: 0 });
-      await appendLog("RESET");
-      return { ok: true };
-    },
-  };
-}
-
-// =============== UI PRIMITIVES ===============
-function Banner({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <div className="fixed left-0 right-0 top-14 z-30 border-b-2 border-red-900 bg-red-950 px-4 py-2 text-center text-xs font-extrabold tracking-[0.18em] uppercase text-red-200">
-      {text}
+/* Diagnostics */
+#diag{position:fixed;left:8px;bottom:8px;background:#0b0f14;border:1px solid #203049;color:#d9e6ff;border-radius:10px;padding:8px 10px;font:12px ui-monospace,Menlo,Consolas,monospace;opacity:.85;display:none;max-width:92vw}
+#diag b{color:#9ad0ff}
+</style>
+</head>
+<body>
+<header>
+  <div class="lcars">
+    <div class="b1"></div><div class="b2"></div>
+    <div class="title">LCARS // SELF‑DESTRUCT</div>
+    <div class="tabs">
+      <button class="tab active" id="tabCountdown">COUNTDOWN</button>
+      <button class="tab" id="tabControl">CONTROL</button>
+      <button class="tab" id="tabDiag">DIAG</button>
     </div>
-  );
-}
+  </div>
+</header>
+<div id="banner">INITIALIZING…</div>
+<div id="alert"><div class="msg">ALERT<div class="sub" id="alertSub"></div></div></div>
+<div id="toasts"></div>
+<div id="diag" class="code"></div>
 
-function Toasts({ toasts }: { toasts: string[] }) {
-  return (
-    <div className="fixed bottom-3 right-3 z-[9999] flex flex-col gap-2">
-      {toasts.map((t, i) => (
-        <div
-          key={i}
-          className="rounded-lg border border-red-400/50 bg-red-950/60 px-3 py-2 text-[11px] font-black tracking-wider text-rose-100"
-        >
-          {t}
-        </div>
-      ))}
+<main class="grid">
+  <!-- COUNTDOWN VIEW -->
+  <section id="viewCountdown" class="grid">
+    <div class="card" style="display:flex;flex-direction:column;align-items:center;text-align:center">
+      <h2>SELF‑DESTRUCT STATUS</h2>
+      <div class="statusRow">
+        <span class="small">STATE</span><span id="statusPill" class="pill idle">IDLE</span>
+        <span class="small">SINCE</span><span id="since">–</span>
+      </div>
+      <div class="timer">
+        <div class="small">TIME REMAINING</div>
+        <div id="timeLeft" class="big">00:00</div>
+        <div class="bar"><div id="barFill"></div></div>
+        <div class="small" id="countdownInfo">—</div>
+      </div>
     </div>
-  );
+    <div class="card" style="max-width:min(980px,92vw);margin:0 auto">
+      <h2>EVENT LOG</h2>
+      <pre id="log" class="log code"></pre>
+    </div>
+  </section>
+
+  <!-- CONTROL VIEW -->
+  <section id="viewControl" class="grid" style="display:none;grid-template-columns:1fr 1fr">
+    <div class="card" id="operatorCard">
+      <h2>OPERATOR</h2>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div><span class="small">UID</span> <code id="uidVal">—</code></div>
+        <div class="pill" id="opStatus" style="padding:4px 10px">VIEWER DEVICE</div>
+        <button id="btnCopyUid">Copy UID</button>
+        <button id="btnClaim">Set this device as operator</button>
+        <button id="btnResetOp" class="danger">Reset operator (null)</button>
+      </div>
+      <p class="small">If operator not set, any signed‑in device can claim. Once set, only that operator (or a recovery token) can transfer.</p>
+    </div>
+
+    <div class="card">
+      <h2>ACCESS CONTROL</h2>
+      <form id="formPin" class="two" autocomplete="on" novalidate>
+        <div>
+          <label for="pin">Operator PIN</label>
+          <input id="pin" name="operator_pin" type="password" placeholder="Enter PIN" autocomplete="current-password" inputmode="numeric"/>
+        </div>
+        <div style="display:flex;gap:8px;align-items:end">
+          <button id="btnUnlock" class="primary" type="submit">Unlock</button>
+          <button id="btnSetPin" type="button">Set PIN</button>
+        </div>
+      </form>
+
+      <form id="formRekey" class="two" autocomplete="off" novalidate style="margin-top:8px">
+        <div>
+          <label for="rkToken">Recovery Token</label>
+          <input id="rkToken" name="recovery_token" type="password" placeholder="Paste token" autocomplete="one-time-code"/>
+        </div>
+        <div style="display:flex;gap:8px;align-items:end">
+          <button id="btnRekey" class="warn" type="submit">Rekey via Token</button>
+          <button id="btnGenToken" type="button">Generate Token</button>
+        </div>
+      </form>
+      <p class="small">PIN/Token hashes only stored; token single‑use.</p>
+    </div>
+
+    <div class="card" id="officerSetup">
+      <h2>OFFICERS — ONE‑TIME SETUP</h2>
+      <form id="formOfficers" class="two" autocomplete="off" novalidate>
+        <div><label for="o1n">Officer 1 Name</label><input id="o1n" placeholder="Name"/></div>
+        <div><label for="o1p">Officer 1 PIN</label><input id="o1p" type="password" placeholder="••••" autocomplete="new-password"/></div>
+        <div><label for="o2n">Officer 2 Name</label><input id="o2n" placeholder="Name"/></div>
+        <div><label for="o2p">Officer 2 PIN</label><input id="o2p" type="password" placeholder="••••" autocomplete="new-password"/></div>
+        <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:10px">
+          <button id="btnSaveOfficers" class="warn" type="submit">Save Officers</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>ARMING — VERIFY</h2>
+      <form id="formVerify" class="two" autocomplete="off" novalidate>
+        <div><label for="v1n">Officer 1 Name</label><input id="v1n" placeholder="Enter O1 name"/></div>
+        <div><label for="v1p">Officer 1 PIN</label><input id="v1p" type="password" placeholder="••••" autocomplete="current-password"/></div>
+        <div><label for="v2n">Officer 2 Name</label><input id="v2n" placeholder="Enter O2 name"/></div>
+        <div><label for="v2p">Officer 2 PIN</label><input id="v2p" type="password" placeholder="••••" autocomplete="current-password"/></div>
+        <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:10px">
+          <button id="btnArm" class="warn" type="submit">Arm</button>
+          <button id="btnDisarm" type="button">Disarm</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>COUNTDOWN</h2>
+      <div class="two">
+        <div><label for="mins">Minutes</label><input id="mins" type="number" min="0" value="10"/></div>
+        <div><label for="secs">Seconds</label><input id="secs" type="number" min="0" max="59" value="0"/></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button id="btnStart" class="primary">Start (MARK)</button>
+        <button id="btnAbort" class="danger">Abort</button>
+        <button id="btnReset">Reset</button>
+        <button id="btnDetonate" class="danger" title="Mark DETONATED when T-0 reached" disabled>Mark Detonated</button>
+      </div>
+      <p class="small">“Mark Detonated” appears at T‑0 (operator only) to persist the terminal state to DB/log.</p>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
+import { getDatabase, ref, child, onValue, update, get } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
+
+/* ==== CONFIG (replace if needed) ==== */
+const firebaseConfig={
+  apiKey:"AIzaSyCbXxL7mv9U10MxYkdNsVQrijrpsVGoGU0",
+  authDomain:"self-destruct-console.firebaseapp.com",
+  databaseURL:"https://self-destruct-console-default-rtdb.europe-west1.firebasedatabase.app/",
+  projectId:"self-destruct-console",
+  storageBucket:"self-destruct-console.firebasestorage.app",
+  messagingSenderId:"669939099742",
+  appId:"1:669939099742:web:310269ae940dd68a84accf"
+};
+
+/* ==== UTIL ==== */
+const $=s=>document.querySelector(s);
+const now=()=>Date.now();
+const pad2=n=>String(n).padStart(2,'0');
+const fmt=ms=>{ if(ms<0) ms=0; const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60; return (h?pad2(h)+':':'')+pad2(m)+':'+pad2(s); };
+function toast(txt){ const d=document.createElement('div'); d.className='toast'; d.textContent=txt; $('#toasts').appendChild(d); setTimeout(()=>d.remove(),4200); }
+async function sha256(str){ const buf=new TextEncoder().encode(str); const h=await crypto.subtle.digest('SHA-256',buf); return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+
+/* ==== STATE ==== */
+let app, db, auth; let connected=false, authed=false, operatorCapable=false, unlocked=false;
+let initStableSince=0; const STABLE_MS=900; // anti-flicker
+let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[]};
+let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, officers:{ o1:{}, o2:{} }, lockoutUntil:0, lockoutReason:'LOCKOUT' };
+
+/* ==== DOM refs ==== */
+const banner=$('#banner'), alertBox=$('#alert'), alertSub=$('#alertSub');
+const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log'), diag=$('#diag');
+const btnDetonate=$('#btnDetonate');
+
+/* ==== NAV ==== */
+$('#tabCountdown').addEventListener('click',()=>showTab('countdown'));
+$('#tabControl').addEventListener('click',()=>showTab('control'));
+$('#tabDiag').addEventListener('click',()=>{ diag.style.display = (diag.style.display==='none'||!diag.style.display)?'block':'none'; });
+function showTab(which){ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); if(which==='control'){ $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; } else { $('#tabCountdown').classList.add('active'); $('#viewControl').style.display='none'; $('#viewCountdown').style.display='grid'; } }
+
+/* ==== ALERTS/BANNERS ==== */
+function setBanner(txt){ banner.textContent=txt; banner.style.display = txt? 'block':'none'; }
+function showAlert(main, sub){ alertSub.textContent=sub||''; alertBox.style.display='flex'; }
+function hideAlert(){ alertBox.style.display='none'; }
+function recomputeAlert(){
+  // lockout reserved (not used by client)
+  if(SEC.lockoutUntil && now()<SEC.lockoutUntil){ showAlert('LOCKOUT', `${SEC.lockoutReason} · ${Math.ceil((SEC.lockoutUntil-now())/1000)}s`); return; }
+  // init stability: avoid flicker until both authed+connected for STABLE_MS
+  if(!(connected && authed)){ setBanner('INITIALIZING…'); hideAlert(); return; }
+  if(initStableSince===0) initStableSince=now();
+  if(now()-initStableSince<STABLE_MS){ setBanner('INITIALIZING…'); hideAlert(); return; }
+  // access
+  hideAlert();
+  if(!operatorCapable) setBanner('ACCESS DENIED — NOT OPERATOR · Claim or Rekey'); else setBanner('');
 }
 
-// =============== MAIN APP ====================
-export default function App() {
-  const { db, user, connected } = useFirebase();
-  const pub = usePublic(db);
-  const { sec, isOperator } = useSecurity(db, user?.uid);
-  const operatorCapable = useProbe(db, isOperator);
-  const actions = useActions(db, user);
+/* ==== RENDER ==== */
+function render(){
+  const s=publicState.status||'IDLE';
+  statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase();
+  sinceEl.textContent = publicState.since ? new Date(publicState.since).toLocaleString() : '–';
+  if(s==='COUNTDOWN'){
+    const left=(publicState.startAt||0)+(publicState.durationMs||0)-now();
+    timeLeftEl.textContent=fmt(left); timeLeftEl.classList.toggle('flash', left<=30000);
+    if(publicState.durationMs>0) barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/publicState.durationMs))))+'%';
+    infoEl.textContent=`${Math.floor((publicState.durationMs||0)/60000)}m ${pad2(Math.floor((publicState.durationMs||0)/1000)%60)}s from ${new Date(publicState.startAt||0).toLocaleTimeString()}`;
+    // show Mark Detonated when T-0 crossed
+    btnDetonate.disabled = !(left<=0 && operatorCapable);
+  } else if(s==='ARMED'){
+    timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; infoEl.textContent='Awaiting MARK'; btnDetonate.disabled=true;
+  } else if(s==='DETONATED'){
+    timeLeftEl.textContent='00:00'; barFill.style.width='100%'; btnDetonate.disabled=true;
+  } else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; infoEl.textContent='—'; btnDetonate.disabled=true; }
+  logEl.textContent=(publicState.logPublic||[]).slice().reverse().join('\n');
+  // diag
+  diag.innerHTML = `UID: <b>${auth?.currentUser?.uid||'–'}</b> · connected:<b>${connected}</b> · authed:<b>${authed}</b> · operatorUid:<b>${SEC.operatorUid||'–'}</b> · opCap:<b>${operatorCapable}</b>`;
+}
 
-  // Anti-flicker: hold INIT banner until stable for 900ms
-  const [initSince, setInitSince] = useState<number | null>(null);
-  const [banner, setBanner] = useState("");
-  useEffect(() => {
-    if (connected && user) {
-      if (!initSince) setInitSince(Date.now());
-      const ok = Date.now() - (initSince ?? Date.now()) >= 900;
-      if (ok) {
-        if (!operatorCapable) setBanner("ACCESS DENIED — NOT OPERATOR · Claim or Rekey");
-        else setBanner("");
-      } else setBanner("INITIALIZING…");
-    } else {
-      setInitSince(null);
-      setBanner("INITIALIZING…");
-    }
-  }, [connected, user, operatorCapable, initSince]);
+/* ==== BOOT ==== */
+let root, pubRef, secRef, probeRef;
+(async function init(){
+  try{
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    await signInAnonymously(auth);
+    onAuthStateChanged(auth, u=>{ authed=!!u; $('#uidVal').textContent=u?u.uid:'—'; if(u) initStableSince=now(); recomputeAlert(); render(); });
 
-  const [toasts, setToasts] = useState<string[]>([]);
-  function toast(msg: string) {
-    setToasts((t) => [...t, msg]);
-    setTimeout(() => setToasts((t) => t.slice(1)), 4200);
-  }
+    db = getDatabase(app);
+    root   = ref(db,'selfDestruct');
+    pubRef = child(root,'public');
+    secRef = child(root,'security');
+    probeRef = child(root,'updateProbe');
 
-  // Local gate for Control tab
-  const [unlocked, setUnlocked] = useState(false);
+    // connection
+    onValue(ref(db,'.info/connected'), s=>{ connected=(s.val()===true); if(connected) initStableSince=now(); recomputeAlert(); render(); });
 
-  // Forms state
-  const [pin, setPin] = useState("");
-  const [rkToken, setRkToken] = useState("");
+    // public readers
+    const pub=(k,cb)=> onValue(child(pubRef,k), snap=>{ cb(snap.val()); render(); });
+    pub('status',     v=> publicState.status=v||'IDLE');
+    pub('since',      v=> publicState.since=v||0);
+    pub('startAt',    v=> publicState.startAt=v||null);
+    pub('durationMs', v=> publicState.durationMs=v||0);
+    pub('armedAt',    v=> publicState.armedAt=v||null);
+    pub('logPublic',  v=> publicState.logPublic=Array.isArray(v)?v:[]);
 
-  const [o1n, setO1n] = useState("");
-  const [o1p, setO1p] = useState("");
-  const [o2n, setO2n] = useState("");
-  const [o2p, setO2p] = useState("");
+    // security reader
+    onValue(secRef, snap=>{ const v=snap.val()||{}; SEC.operatorUid=v.operatorUid||null; SEC.pinHash=v.pinHash||null; SEC.recoveryHash=v.recoveryHash||null; SEC.officers=v.officers||{o1:{},o2:{}}; SEC.lockoutUntil=v.lockoutUntil||0; SEC.lockoutReason=v.lockoutReason||'LOCKOUT'; operatorLabel(); recomputeAlert(); render(); });
 
-  const [v1n, setV1n] = useState("");
-  const [v1p, setV1p] = useState("");
-  const [v2n, setV2n] = useState("");
-  const [v2p, setV2p] = useState("");
+    // probe loop
+    setInterval(canaryWrite, 5000); canaryWrite();
 
-  // Actions wiring
-  async function handleUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    if (!sec.pinHash) return toast("No PIN set yet");
-    const h = await sha256(pin);
-    if (h === sec.pinHash) {
-      setUnlocked(true);
-      toast("Control unlocked");
-    } else toast("Bad PIN");
-  }
+  }catch(err){ console.error(err); showAlert('INIT ERROR', String(err?.message||err)); }
+})();
 
-  async function handleSetPin() {
-    if (!operatorCapable) return toast("Only operator can set PIN");
-    if (pin.length < 4) return toast("PIN too short");
-    await actions.setPin(pin);
-    toast("PIN set");
-  }
+/* ==== OPERATOR PROBE ==== */
+async function canaryWrite(){ try{ await update(probeRef,{ t: Date.now() }); operatorCapable=true; } catch{ operatorCapable=false; } finally{ recomputeAlert(); render(); } }
+function operatorLabel(){ const el=$('#opStatus'); const me=auth?.currentUser?.uid; const isOp = !!me && SEC.operatorUid===me; el.textContent=isOp?'OPERATOR DEVICE':'VIEWER DEVICE'; el.style.background=isOp?'#0b241a':'#1e1e1e'; el.style.color=isOp?'var(--ok)':'#cfcfcf'; el.style.border=isOp?'1px solid #1b5c44':'1px solid #3a3a3a'; }
 
-  async function handleGenToken() {
-    if (!operatorCapable) return toast("Only operator can generate token");
-    const r = await actions.genToken();
-    if (r.ok && r.token) {
-      setRkToken(r.token);
-      toast("Recovery token generated (copy it)");
-    }
-  }
+/* ==== CONTROL — OPERATOR MGMT ==== */
+$('#btnCopyUid').addEventListener('click',()=>{ const uid=auth?.currentUser?.uid; if(uid) navigator.clipboard.writeText(uid).then(()=>toast('UID copied')); });
+$('#btnClaim').addEventListener('click', async ()=>{
+  const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; }
+  const snap=await get(secRef); const v=snap.val()||{};
+  if(!v.operatorUid){ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); return; }
+  if(v.operatorUid===uid){ toast('Already operator'); await canaryWrite(); return; }
+  toast('Operator already set. Use Recovery Token.');
+});
+$('#btnResetOp').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } await update(secRef,{operatorUid:null}); operatorCapable=false; toast('Operator cleared'); recomputeAlert(); });
 
-  async function handleRekey(e: React.FormEvent) {
-    e.preventDefault();
-    const r = await actions.rekeyWithToken(rkToken);
-    if (r.ok) {
-      setUnlocked(true);
-      toast("Operator transferred to this device");
-    } else toast(r.msg || "Invalid token");
-  }
+/* ==== ACCESS CONTROL (local unlock / PIN / token) ==== */
+$('#formPin').addEventListener('submit', async e=>{ e.preventDefault(); const pin=$('#pin').value.trim(); if(!pin){ toast('PIN required'); return; } if(!SEC.pinHash){ toast('No PIN set'); return; } if(await sha256(pin)===SEC.pinHash){ unlocked=true; toast('Control unlocked'); } else { toast('Bad PIN'); } });
+$('#btnSetPin').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } const pin=$('#pin').value.trim(); if(pin.length<4){ toast('PIN too short'); return; } await update(secRef,{pinHash: await sha256(pin)}); toast('PIN set'); });
+$('#formRekey').addEventListener('submit', async e=>{ e.preventDefault(); const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } const h=await sha256(token); if(!SEC.recoveryHash || h!==SEC.recoveryHash){ toast('Invalid token'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } await update(secRef,{operatorUid:uid, operatorSince: Date.now(), recoveryHash:null}); operatorCapable=true; unlocked=true; toast('Operator transferred'); });
+$('#btnGenToken').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Only operator'); return; } const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const token=btoa(String.fromCharCode(...bytes)); $('#rkToken').value=token; await update(secRef,{recoveryHash: await sha256(token)}); toast('Token generated'); });
 
-  async function handleSaveOfficers(e: React.FormEvent) {
-    e.preventDefault();
-    if (!operatorCapable) return toast("Operator required");
-    const o1 = { name: o1n.trim(), pinHash: o1p ? await sha256(o1p) : null };
-    const o2 = { name: o2n.trim(), pinHash: o2p ? await sha256(o2p) : null };
-    await actions.saveOfficers(o1, o2);
-    toast("Officers saved");
-  }
+/* ==== OFFICERS ==== */
+$('#formOfficers').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } const n1=$('#o1n').value.trim(), p1=$('#o1p').value.trim(); const n2=$('#o2n').value.trim(), p2=$('#o2p').value.trim(); await update(child(secRef,'officers'),{ o1:{name:n1||'', pinHash:p1?await sha256(p1):null}, o2:{name:n2||'', pinHash:p2?await sha256(p2):null} }); toast('Officers saved'); });
+async function verifyOfficers(){ const v=(await get(secRef)).val()||{}; const off=v.officers||{}; const i1n=$('#v1n').value.trim(), i1p=$('#v1p').value.trim(); const i2n=$('#v2n').value.trim(), i2p=$('#v2p').value.trim(); const h1=i1p?await sha256(i1p):''; const h2=i2p?await sha256(i2p):''; const ok1=!!off.o1 && (off.o1.name||'')===i1n && (off.o1.pinHash||'')===h1; const ok2=!!off.o2 && (off.o2.name||'')===i2n && (off.o2.pinHash||'')===h2; return ok1 && ok2; }
+$('#formVerify').addEventListener('submit', async e=>{ e.preventDefault(); if(!operatorCapable){ toast('Operator required'); return; } if(!(await verifyOfficers())){ toast('Officer verification failed'); return; } await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now()}); await appendLog('ARMED'); toast('Armed'); });
+$('#btnDisarm').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null}); await appendLog('DISARMED'); });
 
-  async function handleArm(e: React.FormEvent) {
-    e.preventDefault();
-    if (!operatorCapable) return toast("Operator required");
-    const r = await actions.arm(v1n.trim(), v1p, v2n.trim(), v2p);
-    if (!r.ok) return toast(r.msg || "Failed to arm");
-    toast("Armed");
-  }
+/* ==== COUNTDOWN CONTROL ==== */
+$('#btnStart').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } const mins=parseInt($('#mins').value||'0',10)||0; const secs=parseInt($('#secs').value||'0',10)||0; const dur=(mins*60+secs)*1000; await update(pubRef,{status:'COUNTDOWN', since: Date.now(), startAt: Date.now(), durationMs: dur}); await appendLog(`COUNTDOWN START ${mins}m ${pad2(secs)}s`); });
+$('#btnAbort').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } await update(pubRef,{status:'ABORTED', since: Date.now(), startAt:null, durationMs:0}); await appendLog('ABORTED'); });
+$('#btnReset').addEventListener('click', async ()=>{ if(!operatorCapable){ toast('Operator required'); return; } await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0}); await appendLog('RESET'); });
+btnDetonate.addEventListener('click', async ()=>{ if(btnDetonate.disabled) return; if(!operatorCapable){ toast('Operator required'); return; } await update(pubRef,{status:'DETONATED', since: Date.now()}); await appendLog('DETONATED'); });
 
-  // Countdown controls
-  const [mins, setMins] = useState(10);
-  const [secs, setSecs] = useState(0);
+async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')); let arr=Array.isArray(s.val())?s.val():[]; arr.push(`${new Date().toLocaleString()} — ${line}`); if(arr.length>500) arr=arr.slice(-500); await update(pubRef,{logPublic:arr}); } catch{} }
 
-  // Tick time text
-  const [nowTs, setNowTs] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNowTs(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
+/* ==== SOFT TICK ==== */
+setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 250);
 
-  const left = (pub.startAt ?? 0) + (pub.durationMs ?? 0) - nowTs;
-
-  return (
-    <div className="min-h-screen bg-[#070709] text-[#eef3ff]">
-      <header className="sticky top-0 z-20 border-b-2 border-[#262a34] bg-gradient-to-b from-[#0e1118] to-[#0a0c11] px-4 py-2">
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-40 rounded-l-[12px] bg-[#ffb400]" />
-          <div className="h-6 w-28 rounded-r-[12px] bg-[#ff3b3b]" />
-          <div className="text-sm font-black uppercase tracking-[.28em]">
-            LCARS // SELF-DESTRUCT CONSOLE
-          </div>
-          <div className="ml-auto flex gap-2">
-            {/* tabs handled inline below */}
-          </div>
-        </div>
-      </header>
-
-      <Banner text={banner} />
-      <Toasts toasts={toasts} />
-
-      <main className="mx-auto max-w-[1200px] px-4 py-6">
-        {/* TABS */}
-        <div className="mb-4 flex gap-2">
-          <button
-            className={`rounded-full border-2 border-[#262a34] bg-[#131722] px-4 py-2 text-xs font-extrabold tracking-wider ${
-              true ? "" : ""
-            }`}
-            onClick={() => {
-              // scroll to countdown
-              document.getElementById("viewCountdown")?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            COUNTDOWN
-          </button>
-          <button
-            className="rounded-full border-2 border-[#262a34] bg-[#131722] px-4 py-2 text-xs font-extrabold tracking-wider"
-            onClick={() => {
-              document.getElementById("viewControl")?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            CONTROL
-          </button>
-          <div className="ml-auto flex items-center gap-3 text-[11px] text-[#9fb0c9]">
-            <span className="uppercase tracking-wider">UID</span>
-            <code className="text-xs">{user?.uid ?? "—"}</code>
-            <span
-              className={`rounded-full border px-2 py-1 text-[10px] font-black tracking-wider ${
-                isOperator ? "border-emerald-700 bg-emerald-950 text-emerald-300" : "border-zinc-600 bg-zinc-900 text-zinc-300"
-              }`}
-            >
-              {isOperator ? "OPERATOR DEVICE" : "VIEWER DEVICE"}
-            </span>
-          </div>
-        </div>
-
-        {/* COUNTDOWN VIEW */}
-        <section id="viewCountdown" className="grid grid-cols-1 gap-4">
-          <div className="flex flex-col items-center rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-6 text-center shadow-[0_10px_30px_rgba(0,0,0,.35)]">
-            <h2 className="mb-2 text-base uppercase tracking-widest">SELF-DESTRUCT STATUS</h2>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <span className="text-[13px] uppercase tracking-widest text-[#9fb0c9]">STATE</span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-black tracking-widest ${
-                  pub.status === "IDLE"
-                    ? "border border-emerald-900 bg-emerald-950 text-emerald-300"
-                    : pub.status === "ARMED"
-                    ? "border border-amber-800 bg-amber-950 text-amber-300"
-                    : pub.status === "COUNTDOWN"
-                    ? "border border-red-900 bg-red-950 text-red-300"
-                    : pub.status === "ABORTED"
-                    ? "border border-zinc-600 bg-zinc-900 text-zinc-200"
-                    : "border border-rose-900 bg-rose-950 text-rose-300"
-                }`}
-              >
-                {pub.status}
-              </span>
-              <span className="text-[13px] uppercase tracking-widest text-[#9fb0c9]">SINCE</span>
-              <span>{pub.since ? new Date(pub.since).toLocaleString() : "–"}</span>
-            </div>
-
-            <div className="mt-3 flex flex-col items-center gap-2">
-              <div className="text-[13px] uppercase tracking-widest text-[#9fb0c9]">TIME REMAINING</div>
-              <div className={`text-[72px] leading-none tabular-nums ${left <= 30_000 ? "animate-pulse" : ""}`}>
-                {pub.status === "COUNTDOWN" ? fmt(left) : pub.status === "ARMED" ? "— — : — —" : "00:00"}
-              </div>
-              <div className="mt-2 h-[18px] w-[min(900px,92vw)] overflow-hidden rounded-full border border-[#1f2d44] bg-[#101827]">
-                <div
-                  className="h-full transition-[width]"
-                  style={{
-                    width:
-                      pub.status === "COUNTDOWN" && pub.durationMs > 0
-                        ? `${Math.max(0, Math.min(100, Math.round(100 * (1 - left / pub.durationMs))))}%`
-                        : "0%",
-                    background:
-                      "linear-gradient(90deg, #2be4a1, #ffb400, #ff4b4b)",
-                  }}
-                />
-              </div>
-              <div className="text-sm text-[#9fb0c9]">
-                {pub.status === "COUNTDOWN"
-                  ? `${Math.floor((pub.durationMs || 0) / 60000)}m ${pad2(
-                      Math.floor(((pub.durationMs || 0) / 1000) % 60)
-                    )}s from ${new Date(pub.startAt || 0).toLocaleTimeString()}`
-                  : pub.status === "ARMED"
-                  ? "Awaiting MARK"
-                  : "—"}
-              </div>
-            </div>
-          </div>
-
-          <div className="mx-auto w-full max-w-[980px] rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-2 text-base uppercase tracking-widest">EVENT LOG</h2>
-            <pre className="h-[220px] overflow-auto rounded-xl border border-[#1b2740] bg-[#0b0f18] p-3 font-mono text-xs leading-5 text-blue-100">
-{(pub.logPublic || []).slice().reverse().join("\n")}
-            </pre>
-          </div>
-        </section>
-
-        {/* CONTROL VIEW */}
-        <section id="viewControl" className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* Operator Card */}
-          <div className="rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-3 text-base uppercase tracking-widest">OPERATOR DEVICE</h2>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <div>
-                <span className="text-[11px] uppercase tracking-widest text-[#9fb0c9]">UID</span>{" "}
-                <code className="text-xs">{user?.uid ?? "—"}</code>
-              </div>
-              <button
-                className="rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-2 text-[11px] font-black tracking-wider"
-                onClick={() => {
-                  if (!navigator.clipboard || !user?.uid) return;
-                  navigator.clipboard.writeText(user.uid);
-                  toast("UID copied");
-                }}
-              >
-                Copy UID
-              </button>
-              <button
-                className="rounded-lg border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-[11px] font-black tracking-wider"
-                onClick={async () => {
-                  const r = await actions.claimOperator();
-                  toast(r.msg || (r.ok ? "Operator claimed" : "Failed"));
-                }}
-              >
-                Set this device as operator
-              </button>
-              <button
-                className="rounded-lg border border-rose-700 bg-rose-900/30 px-3 py-2 text-[11px] font-black tracking-wider"
-                onClick={async () => {
-                  if (!operatorCapable) return toast("Only operator can reset");
-                  await actions.resetOperator();
-                  toast("Operator cleared");
-                }}
-              >
-                Reset operator (null)
-              </button>
-            </div>
-            <p className="mt-2 text-[11px] text-[#9fb0c9]">
-              If no operator is set, any signed-in device can claim. Once set,
-              only that operator (or a recovery token) can transfer.
-            </p>
-          </div>
-
-          {/* Access Control (PIN + Rekey) */}
-          <div className="rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-3 text-base uppercase tracking-widest">ACCESS CONTROL</h2>
-            <form
-              onSubmit={handleUnlock}
-              className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]"
-              autoComplete="on"
-              noValidate
-            >
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Operator PIN
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  name="operator_pin"
-                  inputMode="numeric"
-                  autoComplete="current-password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="Enter PIN"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <button type="submit" className="rounded-xl border border-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider">
-                  Unlock
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-sky-600 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={handleSetPin}
-                >
-                  Set PIN
-                </button>
-              </div>
-            </form>
-
-            <form
-              onSubmit={handleRekey}
-              className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]"
-              autoComplete="off"
-              noValidate
-            >
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Recovery Token
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  name="recovery_token"
-                  autoComplete="one-time-code"
-                  value={rkToken}
-                  onChange={(e) => setRkToken(e.target.value)}
-                  placeholder="Paste token"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <button type="submit" className="rounded-xl border border-amber-600 px-3 py-2 text-[11px] font-black tracking-wider">
-                  Rekey via Token
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-amber-600/60 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={handleGenToken}
-                >
-                  Generate Token
-                </button>
-              </div>
-            </form>
-            {!unlocked && (
-              <p className="mt-2 text-[11px] text-[#9fb0c9]">
-                Unlocking is local UI only; server authority still enforced by
-                rules (operator required for writes).
-              </p>
-            )}
-          </div>
-
-          {/* Officers */}
-          <div className="rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-3 text-base uppercase tracking-widest">OFFICERS — ONE‑TIME SETUP</h2>
-            <form onSubmit={handleSaveOfficers} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 1 Name
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  value={o1n}
-                  onChange={(e) => setO1n(e.target.value)}
-                  placeholder="Name"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 1 PIN
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={o1p}
-                  onChange={(e) => setO1p(e.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 2 Name
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  value={o2n}
-                  onChange={(e) => setO2n(e.target.value)}
-                  placeholder="Name"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 2 PIN
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={o2p}
-                  onChange={(e) => setO2p(e.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <button type="submit" className="rounded-xl border border-amber-600 px-3 py-2 text-[11px] font-black tracking-wider">
-                  Save Officers
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Arming + Countdown */}
-          <div className="rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-3 text-base uppercase tracking-widest">ARMING — VERIFY</h2>
-            <form onSubmit={handleArm} className="grid grid-cols-1 gap-3 sm:grid-cols-2" noValidate>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 1 Name
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  value={v1n}
-                  onChange={(e) => setV1n(e.target.value)}
-                  placeholder="Enter O1 name"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 1 PIN
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  autoComplete="current-password"
-                  value={v1p}
-                  onChange={(e) => setV1p(e.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 2 Name
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  value={v2n}
-                  onChange={(e) => setV2n(e.target.value)}
-                  placeholder="Enter O2 name"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">
-                  Officer 2 PIN
-                </label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="password"
-                  autoComplete="current-password"
-                  value={v2p}
-                  onChange={(e) => setV2p(e.target.value)}
-                  placeholder="••••"
-                />
-              </div>
-              <div className="sm:col-span-2 flex gap-2">
-                <button type="submit" className="rounded-xl border border-amber-600 px-3 py-2 text-[11px] font-black tracking-wider">
-                  Arm
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-zinc-600 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={async () => {
-                    const r = await actions.disarm();
-                    if (r.ok) toast("Disarmed");
-                  }}
-                >
-                  Disarm
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="rounded-2xl border border-[#202c3d] bg-gradient-to-b from-[#161b28] to-[#111621] p-4">
-            <h2 className="mb-3 text-base uppercase tracking-widest">COUNTDOWN</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">Minutes</label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="number"
-                  min={0}
-                  value={mins}
-                  onChange={(e) => setMins(parseInt(e.target.value || "0"))}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] uppercase tracking-widest text-[#9fb0c9]">Seconds</label>
-                <input
-                  className="w-full rounded-xl border border-[#203049] bg-[#0f1421] px-3 py-2 text-sm"
-                  type="number"
-                  min={0}
-                  max={59}
-                  value={secs}
-                  onChange={(e) => setSecs(parseInt(e.target.value || "0"))}
-                />
-              </div>
-              <div className="sm:col-span-2 flex gap-2">
-                <button
-                  className="rounded-xl border border-emerald-600 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={async () => {
-                    const r = await actions.startCountdown(mins, secs);
-                    if (r.ok) toast("Countdown started");
-                  }}
-                >
-                  Start (MARK)
-                </button>
-                <button
-                  className="rounded-xl border border-rose-600 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={async () => {
-                    const r = await actions.abort();
-                    if (r.ok) toast("Aborted");
-                  }}
-                >
-                  Abort
-                </button>
-                <button
-                  className="rounded-xl border border-zinc-600 px-3 py-2 text-[11px] font-black tracking-wider"
-                  onClick={async () => {
-                    const r = await actions.reset();
-                    if (r.ok) toast("Reset");
-                  }}
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
+</script>
+</body>
+</html>
