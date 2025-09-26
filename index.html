@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self-Destruct — v11.4</title>
+<title>LCARS Self-Destruct — v11.5</title>
 <style>
 :root{--bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;--ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;--amber:#ffb400;--red:#ff3b3b}
 *{box-sizing:border-box}
@@ -149,6 +149,7 @@ button[disabled]{opacity:.55;cursor:not-allowed}
           <span id="officersLockedPill" class="pill" style="display:none;padding:6px 10px">LOCKED</span>
         </div>
       </form>
+      <p class="small" id="officerHelp">First-time setup: operator + IDLE. <strong>No token needed.</strong> To change later, paste a valid Recovery Token and use <em>Rotate with Token</em>.</p>
       <form id="formRotateOfficers" hidden aria-hidden="true"><input type="text" name="username" autocomplete="username" value="rotate-officers" hidden /></form>
       <div id="rotateBlock" style="display:none;margin-top:10px">
         <h3 class="small">Rotate officers (requires Recovery Token)</h3>
