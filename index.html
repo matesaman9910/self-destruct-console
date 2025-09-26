@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LCARS Self‑Destruct — v11</title>
+<title>LCARS Self‑Destruct — v11.3</title>
 <style>
 :root{--bg:#070709;--text:#eef3ff;--muted:#9fb0c9;--line:#262a34;--ok:#2be4a1;--warn:#ffb400;--alert:#ff4b4b;--amber:#ffb400;--red:#ff3b3b}
 *{box-sizing:border-box}
@@ -178,7 +178,7 @@ button[disabled]{opacity:.55;cursor:not-allowed}
       <h2>ARM / DISARM</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button id="btnArm" class="warn">Arm (verify officers in dialog)</button>
-        <button id="btnDisarm">Disarm</button>
+        <button id="btnDisarm">Disarm (verify)</button>
       </div>
     </div>
 
@@ -255,6 +255,7 @@ function loadPref(k,def){ try{ const v=JSON.parse(localStorage.getItem('lcars_'+
 
 /* STATE */
 let app, db, auth; let connected=false, authed=false, operatorCapable=false; let unlocked=false; // local UI gate
+let controlVisible=false; // pin gate only when control is visible
 let initStableSince=0; const STABLE_MS=900;
 let publicState={status:'IDLE',since:0,startAt:null,durationMs:0,armedAt:null,logPublic:[],timerLocked:false};
 let SEC={ operatorUid:null, pinHash:null, recoveryHash:null, officersLocked:false };
@@ -274,13 +275,11 @@ function cancelSpeech(){ try{ window.speechSynthesis.cancel(); }catch{} }
 function populateVoices(){ const sel=$('#voiceSel'); sel.innerHTML=''; const vs=window.speechSynthesis.getVoices(); vs.forEach(v=>{ const opt=document.createElement('option'); opt.value=v.name; opt.textContent=`${v.name} — ${v.lang}`; if(v.name===selectedVoiceName) opt.selected=true; sel.appendChild(opt); }); }
 if('speechSynthesis' in window){ window.speechSynthesis.onvoiceschanged=populateVoices; setTimeout(populateVoices, 300); }
 
-/* DOM */
+/* DOM / NAV + GATE */
 const banner=$('#banner'); const gate=$('#gate'); const control=$('#viewControl');
 const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'), barFill=$('#barFill'), infoEl=$('#countdownInfo'), logEl=$('#log');
 const officersLockedPill=$('#officersLockedPill'); const rotateBlock=$('#rotateBlock'); const timerLockPill=$('#timerLockPill');
 
-/* NAV + GATE */
-let controlVisible=false;
 $('#tabCountdown').addEventListener('click',()=>{ showTab('countdown'); });
 $('#tabControl').addEventListener('click',()=>{ showTab('control'); });
 $('#formUnlock').addEventListener('submit', async e=>{ e.preventDefault(); const pin=$('#pin').value.trim(); if(!SEC.pinHash){ unlocked=true; closeGate(); return; } if(!pin){ toast('PIN required'); return; } if(await sha256(pin)===SEC.pinHash){ unlocked=true; closeGate(); toast('Control unlocked'); } else { toast('Bad PIN'); } });
@@ -294,7 +293,14 @@ function recomputeBanner(){ if(!(connected && authed)){ setBanner('INITIALIZING�
 
 /* Render */
 function render(){ const s=publicState.status||'IDLE'; statusPill.textContent=s; statusPill.className='pill '+s.toLowerCase(); sinceEl.textContent = publicState.since ? new Date(publicState.since).toLocaleString() : '–'; if(s==='COUNTDOWN'){ const left=(publicState.startAt||0)+(publicState.durationMs||0)-now(); timeLeftEl.textContent=fmt(left); timeLeftEl.classList.toggle('flash', left<=30000); if(publicState.durationMs>0) barFill.style.width=Math.max(0,Math.min(100,Math.round(100*(1-left/publicState.durationMs))))+'%'; infoEl.textContent=`${Math.floor((publicState.durationMs||0)/60000)}m ${pad2(Math.floor((publicState.durationMs||0)/1000)%60)}s from ${new Date(publicState.startAt||0).toLocaleTimeString()}`; const sec=Math.ceil(left/1000); if(sec!==lastBeepSec){ if(tickOn && audioEnabled && sec>0) tone({freq:960,dur:0.03,type:'square',amp:0.7}); lastBeepSec=sec; } if(voiceEnabled && speakFinal10 && sec<=10 && sec>0 && sec!==lastSpokenSec){ speak(String(sec)); lastSpokenSec=sec; } if(sec<=0 && voiceEnabled && speakFinal10 && lastSpokenSec!==0){ speak('Zero'); lastSpokenSec=0; } } else if(s==='ARMED'){ timeLeftEl.textContent='— — : — —'; timeLeftEl.classList.remove('flash'); barFill.style.width='0%'; infoEl.textContent='Awaiting MARK'; lastBeepSec=null; lastSpokenSec=null; } else if(s==='DETONATED'){ timeLeftEl.textContent='00:00'; barFill.style.width='100%'; } else { timeLeftEl.textContent='00:00'; barFill.style.width='0%'; infoEl.textContent='—'; lastBeepSec=null; lastSpokenSec=null; }
-  logEl.textContent=(publicState.logPublic||[]).slice().reverse().join('\n'); officersLockedPill.style.display = SEC.officersLocked? 'inline-flex':'none'; $('#btnSaveOfficers').disabled = SEC.officersLocked || !operatorCapable; rotateBlock.style.display = SEC.officersLocked? 'block':'none'; timerLockPill.style.display = publicState.timerLocked? 'inline-flex':'none'; ensureGate(); }
+  logEl.textContent=(publicState.logPublic||[]).slice().reverse().join('\n');
+  officersLockedPill.style.display = SEC.officersLocked? 'inline-flex':'none';
+  const me=auth?.currentUser?.uid; const isMeOp = !!me && SEC.operatorUid===me;
+  const canSaveOfficers = operatorCapable && !SEC.officersLocked && ( (!SEC.operatorUid) || (isMeOp && publicState.status==='IDLE') );
+  $('#btnSaveOfficers').disabled = !canSaveOfficers;
+  rotateBlock.style.display = SEC.officersLocked? 'block':'none';
+  timerLockPill.style.display = publicState.timerLocked? 'inline-flex':'none';
+  ensureGate(); }
 setInterval(()=>{ if(publicState.status==='COUNTDOWN') render(); }, 200);
 
 /* Firebase boot */
@@ -309,10 +315,10 @@ function requireOp(){ if(!operatorCapable){ toast('Only operator'); return false
 
 /* Operator mgmt */
 $('#btnCopyUid').addEventListener('click',()=>{ const uid=auth?.currentUser?.uid; if(uid) navigator.clipboard.writeText(uid).then(()=>toast('UID copied')); });
-$('#btnClaim').addEventListener('click', async ()=>{ if(!requireOp() && SEC.operatorUid){ toast('Operator already set'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); } catch(e){ toast('Operator already set — use Recovery Token'); } });
+$('#btnClaim').addEventListener('click', async ()=>{ const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ await update(secRef,{operatorUid:uid, operatorSince: Date.now()}); toast('Operator claimed'); await canaryWrite(); } catch(e){ toast('Operator already set — use Recovery Token'); } });
 $('#btnResetOp').addEventListener('click', async ()=>{ if(!requireOp()) return; if(publicState.status!=='IDLE'){ toast('Reset operator only from IDLE'); return; } try{ await update(secRef,{operatorUid:null}); toast('Operator cleared'); operatorCapable=false; recomputeBanner(); } catch{ toast('Reset failed'); } });
 
-/* Token */
+/* Token (strict rotate) */
 $('#btnGenToken').addEventListener('click', async ()=>{ if(!requireOp()) return; try{ const hasCurrent=!!SEC.recoveryHash; const field=$('#rkToken'); const pasted=field.value.trim(); if(hasCurrent){ if(!pasted){ toast('Paste current token to rotate'); return; } if(pasted.length>499){ toast('Token too long'); return; } const oldH=await sha256(pasted); const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const newTok=btoa(String.fromCharCode(...bytes)); field.value=newTok; await update(secRef,{ rekeyAttempt: oldH, recoveryHash: await sha256(newTok) }); toast('Token rotated (old consumed)'); } else { const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const token=btoa(String.fromCharCode(...bytes)); field.value=token; await update(secRef,{ recoveryHash: await sha256(token) }); toast('Token generated'); } } catch{ toast('Token op failed'); } });
 $('#btnCopyToken').addEventListener('click',()=>{ const v=$('#rkToken').value; if(!v){ toast('No token'); return; } navigator.clipboard.writeText(v).then(()=>{ $('#rkToken').value=''; toast('Token copied & hidden'); }); });
 $('#btnRekey').addEventListener('click', async ()=>{ const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } if(token.length>499){ toast('Token too long'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, operatorUid:uid, operatorSince: Date.now(), recoveryHash:null }); $('#rkToken').value=''; toast('Operator transferred'); await canaryWrite(); } catch{ toast('Rekey failed'); } });
@@ -321,11 +327,13 @@ $('#btnRekey').addEventListener('click', async ()=>{ const token=$('#rkToken').v
 $('#btnSetPin').addEventListener('click', async ()=>{ if(!requireOp()) return; const token=$('#rkToken').value.trim(); if(!token){ toast('Paste valid token above'); return; } if(token.length>499){ toast('Token too long'); return; } const newPin=$('#newPin').value.trim(); if(newPin.length<4){ toast('PIN too short'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, pinHash: await sha256(newPin), recoveryHash:null }); $('#newPin').value=''; $('#rkToken').value=''; toast('PIN set (token consumed)'); } catch{ toast('Set PIN failed'); } });
 
 /* Officers */
-$('#formOfficers').addEventListener('submit', async e=>{ e.preventDefault(); if(!requireOp()) return; if(SEC.officersLocked){ toast('Officers are locked'); return; } const n1=$('#o1n').value.trim(), p1=$('#o1p').value.trim(); const n2=$('#o2n').value.trim(), p2=$('#o2p').value.trim(); if(!n1||!p1||!n2||!p2){ toast('Both officers require name+PIN'); return; } try{ await update(secRef,{ officers:{ o1:{name:n1, pinHash: await sha256(p1)}, o2:{name:n2, pinHash: await sha256(p2)} }, officersLocked:true }); toast('Officers saved & locked'); SEC.officersLocked=true; render(); } catch{ toast('Save officers failed'); } });
+$('#formOfficers').addEventListener('submit', async e=>{ e.preventDefault(); if(!requireOp()) return; if(SEC.officersLocked){ toast('Officers are locked'); return; } if(SEC.operatorUid && publicState.status!=='IDLE'){ toast('Set officers only from IDLE (or rotate with token)'); return; } const n1=$('#o1n').value.trim(), p1=$('#o1p').value.trim(); const n2=$('#o2n').value.trim(), p2=$('#o2p').value.trim(); if(!n1||!p1||!n2||!p2){ toast('Both officers require name+PIN'); return; } try{ await update(secRef,{ officers:{ o1:{name:n1, pinHash: await sha256(p1)}, o2:{name:n2, pinHash: await sha256(p2)} }, officersLocked:true }); toast('Officers saved & locked'); SEC.officersLocked=true; render(); } catch(err){ console.error(err); toast('Permission denied — must be operator on IDLE, or use token to rotate'); } });
 $('#btnRotateOfficers').addEventListener('click', async ()=>{ if(!requireOp()) return; const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } if(token.length>499){ toast('Token too long'); return; } const n1=$('#r_o1n').value.trim(), p1=$('#r_o1p').value.trim(); const n2=$('#r_o2n').value.trim(), p2=$('#r_o2p').value.trim(); if(!n1||!p1||!n2||!p2){ toast('Both officers require name+PIN'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, officers:{ o1:{name:n1, pinHash: await sha256(p1)}, o2:{name:n2, pinHash: await sha256(p2)} }, officersLocked:true }); $('#rkToken').value=''; toast('Officers rotated (token consumed)'); } catch{ toast('Rotate failed'); } });
 
 /* Verify officers (prompt dialog) */
 async function verifyOfficersPrompt(){ const n1=prompt('Officer 1 Name'); const p1=prompt('Officer 1 PIN'); const n2=prompt('Officer 2 Name'); const p2=prompt('Officer 2 PIN'); if(!n1||!p1||!n2||!p2) return false; try{ const v=(await get(secRef)).val()||{}; const off=v.officers||{}; const h1=await sha256(p1); const h2=await sha256(p2); const ok1=!!off.o1 && (off.o1.name||'')===n1 && (off.o1.pinHash||'')===h1; const ok2=!!off.o2 && (off.o2.name||'')===n2 && (off.o2.pinHash||'')===h2; return ok1 && ok2; } catch{ return false; } }
+
+/* Arm / Disarm */
 $('#btnArm').addEventListener('click', async ()=>{ if(!requireOp()) return; if(!SEC.officersLocked){ toast('Set officers first'); return; } if(publicState.status!=='IDLE'){ toast('Can only ARM from IDLE'); return; } if(!(await verifyOfficersPrompt())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now(), startAt:null, durationMs:0, timerLocked:false}); await appendLog('ARMED'); chirp(); } catch{ toast('Arm failed'); } });
 $('#btnDisarm').addEventListener('click', async ()=>{ if(!requireOp()) return; if(!(publicState.status==='ARMED'||publicState.status==='COUNTDOWN')){ toast('Disarm only from ARMED/COUNTDOWN'); return; } if(!(await verifyOfficersPrompt())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null, timerLocked:false}); await appendLog('DISARMED'); } catch{ toast('Disarm failed'); } });
 
@@ -341,91 +349,7 @@ async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')
 </script>
 
 <!-- =============================
-     REALTIME DATABASE RULES v11 (copy into Realtime Database > Rules)
-============================== -->
-<!--
-{
-  "rules": {
-    ".read": false,
-    ".write": false,
-
-    "selfDestruct": {
-      "public": {
-        ".read": true,
-        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || !root.child('selfDestruct/security/operatorUid').exists() )",
-
-        "status": {
-          ".validate": "newData.isString() && newData.val().matches(/^(IDLE|ARMED|COUNTDOWN|ABORTED|DETONATED)$/) && (
-            (data.val()=='IDLE'      && (newData.val()=='IDLE' || newData.val()=='ARMED')) ||
-            (data.val()=='ARMED'     && (newData.val()=='IDLE' || newData.val()=='COUNTDOWN')) ||
-            (data.val()=='COUNTDOWN' && (newData.val()=='IDLE' || newData.val()=='ABORTED' || newData.val()=='DETONATED')) ||
-            (data.val()=='ABORTED'   && (newData.val()=='IDLE')) ||
-            (data.val()=='DETONATED' && (newData.val()=='IDLE')) ||
-            (!data.exists() && newData.val()=='IDLE')
-          ) && (
-            newData.val()!='COUNTDOWN' || ( newData.parent().child('startAt').isNumber() && newData.parent().child('durationMs').isNumber() && newData.parent().child('armedAt').isNumber() && newData.parent().child('timerLocked').val() == true )
-          ) && (
-            newData.val()!='DETONATED' || data.val()=='COUNTDOWN'
-          )"
-        },
-        "since":      { ".validate": "newData.isNumber() && newData.val() >= 0" },
-        "startAt":    { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
-        "durationMs": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000 && root.child('selfDestruct/public/status').val()=='ARMED' && !root.child('selfDestruct/public/timerLocked').val()" },
-        "armedAt":    { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
-        "timerLocked": { ".validate": "newData.isBoolean() && (
-            (!data.exists() && newData.val()==false) ||
-            (root.child('selfDestruct/public/status').val()=='ARMED' && newData.val()==true) ||
-            ((root.child('selfDestruct/public/status').val()=='IDLE' || root.child('selfDestruct/public/status').val()=='ABORTED' || root.child('selfDestruct/public/status').val()=='DETONATED') && newData.val()==false) ||
-            (data.val()==newData.val())
-        )" },
-        "logPublic":  { "$i": { ".validate": "$i.matches(/^[0-9]+$/) && newData.isString()" } }
-      },
-
-      "security": {
-        ".read":  "auth != null && root.child('selfDestruct/security/operatorUid').val() == auth.uid",
-        ".write": "auth != null && (
-          root.child('selfDestruct/security/operatorUid').val() == auth.uid ||
-          !root.child('selfDestruct/security/operatorUid').exists() ||
-          (
-            data.child('recoveryHash').exists() &&
-            newData.child('rekeyAttempt').isString() && newData.child('rekeyAttempt').val().matches(/^[a-f0-9]{64}$/) &&
-            newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() &&
-            newData.child('recoveryHash').val() == null
-          )
-        ) && (
-          root.child('selfDestruct/public/status').val()=='IDLE' || !root.child('selfDestruct/security/operatorUid').exists() ||
-          ( data.child('recoveryHash').exists() && newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() )
-        )",
-
-        "operatorUid": { ".validate": "newData.val() == auth.uid || newData.val() == null" },
-        "pinHash":     { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
-        "recoveryHash":{ ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
-        "rekeyAttempt":{ ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
-        "officersLocked": { ".validate": "newData.isBoolean()" },
-
-        "officers": {
-          ".validate": "(
-            !data.exists() && newData.parent().child('officersLocked').val() == true
-          ) || (
-            data.exists() && newData.val() == data.val()
-          ) || (
-            newData.parent().child('rekeyAttempt').isString() && newData.parent().child('rekeyAttempt').val() == data.parent().child('recoveryHash').val() && newData.parent().child('officersLocked').val() == true
-          )",
-          "o1": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } },
-          "o2": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } }
-        }
-      },
-
-      "updateProbe": {
-        ".read": true,
-        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || !root.child('selfDestruct/security/operatorUid').exists() )"
-      }
-    }
-  }
-}
--->
-<!-- =============================
-     REALTIME DATABASE RULES v11.1 (paste into Rules) — token rotate requires old token; countdown truly public
+     REALTIME DATABASE RULES v11.2 (paste into Rules) — fixes: initial officers if node exists empty; token rotate requires old token
 ============================== -->
 <!--
 {
@@ -452,7 +376,7 @@ async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')
         "recoveryHash": { ".validate": "( data.exists()==false && newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/) ) || ( data.exists()==true && newData.val()==null && newData.parent().child('rekeyAttempt').val() == data.val() ) || ( data.exists()==true && newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/) && newData.parent().child('rekeyAttempt').val() == data.val() )" },
         "rekeyAttempt": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
         "officersLocked": { ".validate": "newData.isBoolean()" },
-        "officers": { ".validate": "((data.exists()==false && newData.parent().child('officersLocked').val() == true) || (data.exists()==true && newData.val() == data.val()) || (newData.parent().child('rekeyAttempt').isString() && newData.parent().child('rekeyAttempt').val() == data.parent().child('recoveryHash').val() && newData.parent().child('officersLocked').val() == true))", "o1": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } }, "o2": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } } }
+        "officers": { ".validate": "(((data.exists()==false) || (data.child('o1').exists()==false && data.child('o2').exists()==false)) && newData.parent().child('officersLocked').val() == true) || (data.exists()==true && newData.val() == data.val()) || (newData.parent().child('rekeyAttempt').isString() && newData.parent().child('rekeyAttempt').val() == data.parent().child('recoveryHash').val() && newData.parent().child('officersLocked').val() == true)", "o1": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } }, "o2": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } } }
       },
       "updateProbe": { ".read": true, ".write": "auth != null && (root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/security/operatorUid').exists()==false)" }
     }
