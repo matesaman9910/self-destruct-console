@@ -268,7 +268,8 @@ function tone({freq=880, dur=0.08, type='sine', amp=1.0}){ if(!audioEnabled||!au
 function chirp(){ if(!audioEnabled||!eventsOn||!audioCtx) return; const t=audioCtx.currentTime; const o=audioCtx.createOscillator(); const g=gain(); o.type='triangle'; o.connect(g); o.frequency.setValueAtTime(800,t); o.frequency.linearRampToValueAtTime(1400,t+0.12); o.frequency.linearRampToValueAtTime(500,t+0.24); o.start(t); o.stop(t+0.26); }
 function siren(){ if(!audioEnabled||!eventsOn||!audioCtx) return; const t=audioCtx.currentTime; const o=audioCtx.createOscillator(); const g=gain(); o.type='sawtooth'; o.connect(g); o.frequency.setValueAtTime(500,t); o.frequency.linearRampToValueAtTime(1200,t+0.5); o.frequency.linearRampToValueAtTime(500,t+1.0); o.start(t); o.stop(t+1.0); }
 let voiceEnabled=loadPref('voiceEnabled', true); let speakFinal10=loadPref('speakFinal10', true); let speakRate=loadPref('speakRate',1); let selectedVoiceName=loadPref('voiceName','');
-function speak(txt){ if(!voiceEnabled || !('speechSynthesis' in window)) return; const u=new SpeechSynthesisUtterance(txt); u.rate = speakRate; const vs=window.speechSynthesis.getVoices(); const v = vs.find(v=>v.name===selectedVoiceName) || vs.find(v=>/en|cs|sk|uk/i.test(v.lang)) || vs[0]; if(v) u.voice=v; window.speechSynthesis.speak(u); }
+async function ensureVoices(timeout=1500){ if(!('speechSynthesis' in window)) return []; const got=window.speechSynthesis.getVoices(); if(got && got.length) return got; return await new Promise(res=>{ const t=setTimeout(()=>res(window.speechSynthesis.getVoices()||[]), timeout); window.speechSynthesis.onvoiceschanged=()=>{ clearTimeout(t); res(window.speechSynthesis.getVoices()||[]); }; }); }
+async function speak(txt){ if(!voiceEnabled || !('speechSynthesis' in window)) return; const vs=await ensureVoices(); const u=new SpeechSynthesisUtterance(txt); u.rate=speakRate; let v=vs.find(v=>v.name===selectedVoiceName); if(!v){ v=vs.find(v=>/cs|sk|uk|en/i.test(v.lang)) || vs[0]; } if(v){ u.voice=v; u.lang=v.lang; } window.speechSynthesis.speak(u); }
 function cancelSpeech(){ try{ window.speechSynthesis.cancel(); }catch{} }
 function populateVoices(){ const sel=$('#voiceSel'); sel.innerHTML=''; const vs=window.speechSynthesis.getVoices(); vs.forEach(v=>{ const opt=document.createElement('option'); opt.value=v.name; opt.textContent=`${v.name} — ${v.lang}`; if(v.name===selectedVoiceName) opt.selected=true; sel.appendChild(opt); }); }
 if('speechSynthesis' in window){ window.speechSynthesis.onvoiceschanged=populateVoices; setTimeout(populateVoices, 300); }
@@ -279,12 +280,13 @@ const statusPill=$('#statusPill'), sinceEl=$('#since'), timeLeftEl=$('#timeLeft'
 const officersLockedPill=$('#officersLockedPill'); const rotateBlock=$('#rotateBlock'); const timerLockPill=$('#timerLockPill');
 
 /* NAV + GATE */
-$('#tabCountdown').addEventListener('click',()=>showTab('countdown'));
-$('#tabControl').addEventListener('click',()=>{ showTab('control'); ensureGate(); });
+let controlVisible=false;
+$('#tabCountdown').addEventListener('click',()=>{ showTab('countdown'); });
+$('#tabControl').addEventListener('click',()=>{ showTab('control'); });
 $('#formUnlock').addEventListener('submit', async e=>{ e.preventDefault(); const pin=$('#pin').value.trim(); if(!SEC.pinHash){ unlocked=true; closeGate(); return; } if(!pin){ toast('PIN required'); return; } if(await sha256(pin)===SEC.pinHash){ unlocked=true; closeGate(); toast('Control unlocked'); } else { toast('Bad PIN'); } });
-function ensureGate(){ const mustLock = !!SEC.pinHash; control.classList.toggle('locked', !unlocked && mustLock); control.setAttribute('aria-hidden', (!unlocked && mustLock) ? 'true':'false'); gate.style.display = (!unlocked && mustLock) ? 'flex':'none'; }
+function ensureGate(){ const mustLock = !!SEC.pinHash; const show = (!unlocked && mustLock && controlVisible); control.classList.toggle('locked', show); control.setAttribute('aria-hidden', show ? 'true':'false'); gate.style.display = show ? 'flex':'none'; }
 function closeGate(){ control.classList.remove('locked'); control.setAttribute('aria-hidden','false'); gate.style.display='none'; }
-function showTab(which){ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); if(which==='control'){ $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; } else { $('#tabCountdown').classList.add('active'); $('#viewControl').style.display='none'; $('#viewCountdown').style.display='grid'; } }
+function showTab(which){ document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); if(which==='control'){ controlVisible=true; $('#tabControl').classList.add('active'); $('#viewControl').style.display='grid'; $('#viewCountdown').style.display='none'; } else { controlVisible=false; $('#tabCountdown').classList.add('active'); $('#viewControl').style.display='none'; $('#viewCountdown').style.display='grid'; } ensureGate(); }
 
 /* Banner */
 function setBanner(txt){ banner.textContent=txt; banner.style.display = txt? 'block':'none'; }
@@ -311,7 +313,7 @@ $('#btnClaim').addEventListener('click', async ()=>{ if(!requireOp() && SEC.oper
 $('#btnResetOp').addEventListener('click', async ()=>{ if(!requireOp()) return; if(publicState.status!=='IDLE'){ toast('Reset operator only from IDLE'); return; } try{ await update(secRef,{operatorUid:null}); toast('Operator cleared'); operatorCapable=false; recomputeBanner(); } catch{ toast('Reset failed'); } });
 
 /* Token */
-$('#btnGenToken').addEventListener('click', async ()=>{ if(!requireOp()) return; try{ const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const token=btoa(String.fromCharCode(...bytes)); $('#rkToken').value=token; await update(secRef,{recoveryHash: await sha256(token)}); toast('Token rotated'); } catch{ toast('Token generation failed'); } });
+$('#btnGenToken').addEventListener('click', async ()=>{ if(!requireOp()) return; try{ const hasCurrent=!!SEC.recoveryHash; const field=$('#rkToken'); const pasted=field.value.trim(); if(hasCurrent){ if(!pasted){ toast('Paste current token to rotate'); return; } if(pasted.length>499){ toast('Token too long'); return; } const oldH=await sha256(pasted); const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const newTok=btoa(String.fromCharCode(...bytes)); field.value=newTok; await update(secRef,{ rekeyAttempt: oldH, recoveryHash: await sha256(newTok) }); toast('Token rotated (old consumed)'); } else { const bytes=new Uint8Array(24); crypto.getRandomValues(bytes); const token=btoa(String.fromCharCode(...bytes)); field.value=token; await update(secRef,{ recoveryHash: await sha256(token) }); toast('Token generated'); } } catch{ toast('Token op failed'); } });
 $('#btnCopyToken').addEventListener('click',()=>{ const v=$('#rkToken').value; if(!v){ toast('No token'); return; } navigator.clipboard.writeText(v).then(()=>{ $('#rkToken').value=''; toast('Token copied & hidden'); }); });
 $('#btnRekey').addEventListener('click', async ()=>{ const token=$('#rkToken').value.trim(); if(!token){ toast('Token required'); return; } if(token.length>499){ toast('Token too long'); return; } const uid=auth?.currentUser?.uid; if(!uid){ toast('No auth'); return; } try{ const h=await sha256(token); await update(secRef,{ rekeyAttempt:h, operatorUid:uid, operatorSince: Date.now(), recoveryHash:null }); $('#rkToken').value=''; toast('Operator transferred'); await canaryWrite(); } catch{ toast('Rekey failed'); } });
 
@@ -325,7 +327,7 @@ $('#btnRotateOfficers').addEventListener('click', async ()=>{ if(!requireOp()) r
 /* Verify officers (prompt dialog) */
 async function verifyOfficersPrompt(){ const n1=prompt('Officer 1 Name'); const p1=prompt('Officer 1 PIN'); const n2=prompt('Officer 2 Name'); const p2=prompt('Officer 2 PIN'); if(!n1||!p1||!n2||!p2) return false; try{ const v=(await get(secRef)).val()||{}; const off=v.officers||{}; const h1=await sha256(p1); const h2=await sha256(p2); const ok1=!!off.o1 && (off.o1.name||'')===n1 && (off.o1.pinHash||'')===h1; const ok2=!!off.o2 && (off.o2.name||'')===n2 && (off.o2.pinHash||'')===h2; return ok1 && ok2; } catch{ return false; } }
 $('#btnArm').addEventListener('click', async ()=>{ if(!requireOp()) return; if(!SEC.officersLocked){ toast('Set officers first'); return; } if(publicState.status!=='IDLE'){ toast('Can only ARM from IDLE'); return; } if(!(await verifyOfficersPrompt())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'ARMED', since: Date.now(), armedAt: Date.now(), startAt:null, durationMs:0, timerLocked:false}); await appendLog('ARMED'); chirp(); } catch{ toast('Arm failed'); } });
-$('#btnDisarm').addEventListener('click', async ()=>{ if(!requireOp()) return; if(!(publicState.status==='ARMED'||publicState.status==='COUNTDOWN')){ toast('Disarm only from ARMED/COUNTDOWN'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null, timerLocked:false}); await appendLog('DISARMED'); } catch{ toast('Disarm failed'); } });
+$('#btnDisarm').addEventListener('click', async ()=>{ if(!requireOp()) return; if(!(publicState.status==='ARMED'||publicState.status==='COUNTDOWN')){ toast('Disarm only from ARMED/COUNTDOWN'); return; } if(!(await verifyOfficersPrompt())){ toast('Officer verification failed'); return; } try{ await update(pubRef,{status:'IDLE', since: Date.now(), startAt:null, durationMs:0, armedAt:null, timerLocked:false}); await appendLog('DISARMED'); } catch{ toast('Disarm failed'); } });
 
 /* Timer */
 $('#btnLockTimer').addEventListener('click', async ()=>{ if(!requireOp()) return; if(publicState.status!=='ARMED'){ toast('Arm first'); return; } const mins=parseInt($('#mins').value||'0',10)||0; const secs=parseInt($('#secs').value||'0',10)||0; const dur=(mins*60+secs)*1000; if(dur<=0){ toast('Duration must be > 0'); return; } try{ await update(pubRef,{durationMs: dur, timerLocked: true}); await appendLog(`TIMER LOCK ${mins}m ${pad2(secs)}s`); chirp(); } catch{ toast('Lock failed'); } });
@@ -418,6 +420,41 @@ async function appendLog(line){ try{ const s=await get(child(pubRef,'logPublic')
         ".read": true,
         ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || !root.child('selfDestruct/security/operatorUid').exists() )"
       }
+    }
+  }
+}
+-->
+<!-- =============================
+     REALTIME DATABASE RULES v11.1 (paste into Rules) — token rotate requires old token; countdown truly public
+============================== -->
+<!--
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "selfDestruct": {
+      "public": {
+        ".read": true,
+        ".write": "auth != null && (root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/security/operatorUid').exists()==false)",
+        "status": { ".validate": "newData.isString() && newData.val().matches(/^(IDLE|ARMED|COUNTDOWN|ABORTED|DETONATED)$/) && ((data.val()=='IDLE' && (newData.val()=='IDLE' || newData.val()=='ARMED')) || (data.val()=='ARMED' && (newData.val()=='IDLE' || newData.val()=='COUNTDOWN')) || (data.val()=='COUNTDOWN' && (newData.val()=='IDLE' || newData.val()=='ABORTED' || newData.val()=='DETONATED')) || (data.val()=='ABORTED' && newData.val()=='IDLE') || (data.val()=='DETONATED' && newData.val()=='IDLE') || (data.exists()==false && newData.val()=='IDLE')) && (newData.val()!='COUNTDOWN' || (newData.parent().child('startAt').isNumber() && newData.parent().child('durationMs').isNumber() && newData.parent().child('armedAt').isNumber() && newData.parent().child('timerLocked').val()==true)) && (newData.val()!='DETONATED' || data.val()=='COUNTDOWN')" },
+        "since": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "startAt": { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
+        "durationMs": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000 && root.child('selfDestruct/public/status').val()=='ARMED' && (root.child('selfDestruct/public/timerLocked').exists()==false || root.child('selfDestruct/public/timerLocked').val()==false)" },
+        "armedAt": { ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0)" },
+        "timerLocked": { ".validate": "newData.isBoolean() && ((data.exists()==false && newData.val()==false) || (root.child('selfDestruct/public/status').val()=='ARMED' && newData.val()==true) || ((root.child('selfDestruct/public/status').val()=='IDLE' || root.child('selfDestruct/public/status').val()=='ABORTED' || root.child('selfDestruct/public/status').val()=='DETONATED') && newData.val()==false) || (data.val()==newData.val()))" },
+        "logPublic": { "$i": { ".validate": "$i.matches(/^[0-9]+$/) && newData.isString()" } }
+      },
+      "security": {
+        ".read": "auth != null && root.child('selfDestruct/security/operatorUid').val() == auth.uid",
+        ".write": "auth != null && ( root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/security/operatorUid').exists()==false || ( data.child('recoveryHash').exists() && newData.child('rekeyAttempt').isString() && newData.child('rekeyAttempt').val().matches(/^[a-f0-9]{64}$/) && newData.child('rekeyAttempt').val() == data.child('recoveryHash').val() && ( newData.child('recoveryHash').val() == null || (newData.child('recoveryHash').isString() && newData.child('recoveryHash').val().matches(/^[a-f0-9]{64}$/)) ) ) ) && ( root.child('selfDestruct/public/status').val()=='IDLE' || root.child('selfDestruct/security/operatorUid').exists()==false || (data.child('recoveryHash').exists() && newData.child('rekeyAttempt').val() == data.child('recoveryHash').val()) )",
+        "operatorUid": { ".validate": "newData.val() == auth.uid || newData.val() == null" },
+        "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
+        "recoveryHash": { ".validate": "( data.exists()==false && newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/) ) || ( data.exists()==true && newData.val()==null && newData.parent().child('rekeyAttempt').val() == data.val() ) || ( data.exists()==true && newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/) && newData.parent().child('rekeyAttempt').val() == data.val() )" },
+        "rekeyAttempt": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" },
+        "officersLocked": { ".validate": "newData.isBoolean()" },
+        "officers": { ".validate": "((data.exists()==false && newData.parent().child('officersLocked').val() == true) || (data.exists()==true && newData.val() == data.val()) || (newData.parent().child('rekeyAttempt').isString() && newData.parent().child('rekeyAttempt').val() == data.parent().child('recoveryHash').val() && newData.parent().child('officersLocked').val() == true))", "o1": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } }, "o2": { "name": { ".validate": "newData.val() == null || newData.isString()" }, "pinHash": { ".validate": "newData.val() == null || (newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/))" } } }
+      },
+      "updateProbe": { ".read": true, ".write": "auth != null && (root.child('selfDestruct/security/operatorUid').val() == auth.uid || root.child('selfDestruct/security/operatorUid').exists()==false)" }
     }
   }
 }
